@@ -1,0 +1,31 @@
+// Template: replace {{ROOT_PACKAGE}} with the module's root package (the common prefix of its
+// packages, which `./jbang assess` prints) and {{MODULE_ANCHOR_CLASS}} with any main class of the
+// module. Drop the result into the module's test sources. ArchUnit (archunit-junit5, test scope)
+// derives the slices from the class files; nothing about the layering is assumed.
+package {{ROOT_PACKAGE}};
+
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+
+/**
+ * No dependency cycles between the packages of this module, at any depth, and none between
+ * classes inside a package. Main sources only.
+ */
+@AnalyzeClasses(packagesOf = {{MODULE_ANCHOR_CLASS}}.class, importOptions = ImportOption.DoNotIncludeTests.class)
+class NoCyclesTest {
+
+	/** Every package under the root is a slice; a cycle between any two fails. */
+	@ArchTest
+	static final ArchRule noPackageCycles = slices().matching("{{ROOT_PACKAGE}}.(**)").should().beFreeOfCycles();
+
+	/** Every top-level class is a slice; a cycle between classes of one package fails. */
+	@ArchTest
+	static final ArchRule noClassCycles = slices()
+		.assignedFrom(javaClass -> java.util.Optional.of(javaClass.getName().split("\\$")[0]))
+		.should()
+		.beFreeOfCycles();
+}

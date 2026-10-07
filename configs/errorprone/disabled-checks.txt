@@ -1,0 +1,5 @@
+# Error Prone checks disabled by name in the errorprone profile, each with its reason. These are
+# the ones found to be pure style for a library code base (acp-java, October 2026). A target
+# project adds to this list only with a reason; a real exception is a @SuppressWarnings with a
+# reason, never a disabled check.
+StatementSwitchToExpressionSwitch   style: expression switches are not clearer in every case

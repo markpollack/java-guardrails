@@ -1,0 +1,18 @@
+        <!-- Versions used by the Maven slices in this directory (as proven on acp-java, October 2026).
+             Each slice references these properties; copy the ones its plugin needs. -->
+        <archunit.version>1.4.1</archunit.version>
+        <lincheck.version>3.7</lincheck.version>
+        <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+        <!-- Coverage floors; each module overrides them with its own (see the JaCoCo plugin) -->
+        <jacoco.minimum.line>1.00</jacoco.minimum.line>
+        <jacoco.minimum.branch>1.00</jacoco.minimum.branch>
+        <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
+        <pmd.version>7.28.0</pmd.version>
+        <cpd.minimumTokens>100</cpd.minimumTokens>
+        <!-- spotbugs-maven-plugin 4.10.x requires Maven 3.8.9+; with an older wrapper the
+             4.9.8.x plugin runs the current SpotBugs engine below. -->
+        <spotbugs-maven-plugin.version>4.9.8.5</spotbugs-maven-plugin.version>
+        <spotbugs.version>4.10.4</spotbugs.version>
+        <!-- Error Prone and NullAway (errorprone profile, JDK 21+ only) -->
+        <errorprone.version>2.50.0</errorprone.version>
+        <nullaway.version>0.13.8</nullaway.version>

@@ -1,0 +1,6 @@
+# Checks raised beyond Error Prone's defaults, with the reason they are bugs for a library.
+SystemOut            ERROR  a stray print corrupts a process whose stdout is a protocol stream
+CheckReturnValue     over reactor.core.publisher: a Mono or Flux operator whose result is dropped never runs.
+                     Results that are fine to drop are listed with reasons in reactor-ignorable-results.example.txt
+NullAway             ERROR, JSpecifyMode, OnlyNullMarked: only @NullMarked packages are checked, so a
+                     brownfield code base is marked one package at a time
