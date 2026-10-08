@@ -71,13 +71,13 @@ public class Falsify {
 		}
 		if (gate.equals("errorprone")) {
 			// a diagnostic on the planted file naming the check: "[ERROR] /path/File.java:[12,5] [DeadException] ..."
-			List<String> checks = new java.util.ArrayList<>();
+			// Maven prints each diagnostic twice (inline and in the summary); report the check once
 			for (String line : xml.split("\n")) {
 				if (line.contains(plantedFile.getFileName().toString() + ":[") && line.contains("[DeadException]")) {
-					checks.add("DeadException");
+					return List.of("DeadException");
 				}
 			}
-			return checks;
+			return List.of();
 		}
 		List<String> rules = new java.util.ArrayList<>();
 		for (String violation : xml.split("<violation ")) {

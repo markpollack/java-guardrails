@@ -155,7 +155,60 @@ Caveats for a real adoption, not for the proof:
   configured builder. All recorded in the commit messages.
 - Log categories moved with the extracted code in the servers (message texts unchanged).
 
+## Error Prone, 2026-10-08, same day
+
+The kit's profile installed on the SDK branch (its compile execution is `java-compile`, not
+`default-compile`; the profile names it), `.mvn/jvm.config`, the Reactor droppable-results
+list, test-support modules set to `-XepDisableAllChecks`. Report mode over the whole reactor
+in 16 seconds.
+
+| | Count |
+|---|---|
+| Findings, whole reactor, 28 checks | 179 |
+| In the gated modules (`mcp-core`, two Jackson modules, `mcp`) | 114 |
+| After `InlineMeSuggester` (42) and `MissingSummary` (20) disabled by decision | 55 (incl. 3 javac warnings) |
+| Bug-tagged by Error Prone's own metadata | 10 across 5 checks |
+| After the fix session | **0**; the gate compiles with `-Werror` on |
+
+**Real bugs, three:** a boxed `Boolean` compared by identity (`result.isError() == Boolean.TRUE`)
+in the tool-output schema cache; the stdio client reading the server's stdout and stderr in the
+platform default charset while writing UTF-8; and two authorization-handler interfaces whose
+`NOOP` constant instantiated a nested subclass during interface initialisation
+(`ClassInitializationDeadlock`). Plus a classpath gap: Reactor's `@Nullable` is meta-annotated
+with JSR-305, which was not on `mcp-core`'s compile classpath (now `provided`).
+
+**Suppressions, four, each with its reason on the line:** `removal` on the deprecated
+authorization-handler builder overload kept for compatibility; `ReferenceEquality` on
+`McpError`'s self-cause loop (Throwable's idiom); `SystemOut` on the stdio server transport,
+which owns `System.out`; and `-Xlint:-requires-transitive-automatic` on the `mcp` aggregator
+module alone, whose transitive requires of automatic modules is its documented design.
+
+**Findings for the kit:**
+1. **`-Werror` hides Error Prone behind javac's own warnings.** javac counts `-Werror` warnings
+   as errors and `--should-stop=ifError=FLOW` ends compilation before Error Prone runs, so on
+   a module with any plain javac warning (two removal deprecations, one missing annotation
+   class here) the gate is red for the right reason while Error Prone's findings are
+   invisible and a plant is not checked. acp-java never had a javac warning. `measure` now
+   lists javac's warnings as findings; `falsify errorprone` reports NOT PROVEN in that state;
+   the playbook orders javac's warnings first.
+2. **Classification from Error Prone's own metadata works, with one gap:** many checks are
+   untagged, Javadoc checks and bug finders alike (`BoxedPrimitiveEquality` is an ERROR with no
+   tag). Rule: bug when tagged LIKELY_ERROR, FRAGILE_CODE or CONCURRENCY or ERROR by default;
+   style when tagged STYLE, SIMPLIFICATION, REFACTORING or PERFORMANCE; untagged to the owner
+   with a recommendation from the count.
+3. **Two style checks dominate a library's first run** and are now kit defaults with reasons:
+   `InlineMeSuggester` and `MissingSummary`.
+4. **The compile execution id is a per-target fact.** A build that replaces `default-compile`
+   (this one) needs the profile to name its own execution.
+
+Falsified on the finished branch: a planted dropped `new IllegalArgumentException(...)` turned
+the gate red and the output named `DeadException` on the planted file; restored. 
+`./mvnw -P errorprone verify` on JDK 21: `mcp-core`, the Jackson modules and `mcp` green with
+542 tests; `mcp-test` keeps its 12 Testcontainers errors from the untouched baseline. The PMD
+gate stayed at 0. Owner decision `ERRORPRONE_DISABLED` recorded as the script's recommendation,
+owner to confirm.
+
 ## Not yet done
 
-Error Prone, SpotBugs, ArchUnit and JaCoCo have not been measured here. The trial branch
-`guardrails-pmd` in the local clone is not pushed and nothing is proposed upstream.
+SpotBugs, ArchUnit and JaCoCo have not been measured here. The trial branch `guardrails-pmd` in
+the local clone is not pushed and nothing is proposed upstream.

@@ -1,6 +1,6 @@
 # Error Prone: the compiler's bug checks at ERROR
 
-> Status: measured and installed on the MCP Java SDK (2026-10-08); going green in progress.
+> Status: proven end to end on the MCP Java SDK (2026-10-08, `evidence/mcp-java-sdk.md`: measured, decided, installed, green, falsified) after acp-java.
 > Each step is a **script**, an **AI** task, or a **stop** for the owner. Maven only. Error Prone
 > runs on JDK 21 or newer; the profile activates by JDK, so a JDK 17 build compiles as before.
 

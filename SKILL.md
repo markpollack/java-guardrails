@@ -38,7 +38,7 @@ The gates, in the order to install them, each with its playbook:
 | Tier | Gate | Playbook | Status |
 |---|---|---|---|
 | 1 | PMD size, complexity and duplication | `playbooks/10-pmd.md` | proven on two code bases |
-| 1 | Error Prone defaults at ERROR | `playbooks/11-errorprone.md` | measured and installed on a second code base; going green |
+| 1 | Error Prone defaults at ERROR | `playbooks/11-errorprone.md` | proven on two code bases |
 | 1 | SpotBugs rank 9 plus concurrency | `playbooks/12-spotbugs.md` | outline |
 | 2 | ArchUnit no-cycles, then layers | `playbooks/20-archunit.md` | outline |
 | 2 | JaCoCo coverage floors | `playbooks/21-jacoco.md` | outline |

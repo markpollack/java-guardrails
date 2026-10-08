@@ -16,7 +16,7 @@ threshold will do.
 | Gate | Tier | Status |
 |---|---|---|
 | PMD size, complexity and duplication | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. `evidence/mcp-java-sdk.md` has the numbers. |
-| Error Prone | 1 | Measured and installed on the second code base, playbook written; going green. |
+| Error Prone | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
 | SpotBugs | 1 | Configs from the first code base; playbook is an outline. |
 | ArchUnit, JaCoCo floors | 2 | Template and mechanism from the first code base; playbooks are outlines. |
 | NullAway, Lincheck, PIT | 3 | Outlines. |
