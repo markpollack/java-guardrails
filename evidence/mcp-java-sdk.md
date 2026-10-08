@@ -101,8 +101,61 @@ violations: the six feature-record canonical constructors dropped out; the four 
 constructors that remain (`Resource`, `ResourceTemplate`, `Tool`, `CreateMessageRequest`) are
 secondary constructors with fewer parameters than components, and stay gated.
 
+## Going green, 2026-10-08
+
+Mechanism: fix-all on `mcp-core`, the test-support modules (`mcp-test`, the three conformance
+runners) left out by owner decision with `pmd.skip`/`cpd.skip` in their poms. Starting cost
+after the decisions and the shape exemptions: 57 PMD violations and 33 CPD blocks, all in
+`mcp-core`. Five parallel implementation sessions, one per file group, each on its own
+worktree and branch, merged with one nine-line conflict; then one more commit for the last
+duplicate block.
+
+Result: `./mvnw verify` on the whole reactor runs the gate at `verify` with `failOnViolation`
+true and passes `mcp-core` with **0 PMD, 0 CPD**; `mcp-core` tests pass (the 12 errors in
+`mcp-test` are Testcontainers failing to start on this machine, identical on the untouched
+baseline). Falsified afterwards: the planted method reported by NcssCount,
+CognitiveComplexity, CyclomaticComplexity and ExcessiveParameterList; the planted copies by
+CPD; both restored.
+
+| | Before | After |
+|---|---|---|
+| PMD violations, `mcp-core` | 57 (after decisions; 73 before them) | 0 |
+| CPD blocks at 100 tokens, `mcp-core` | 33 | 0 |
+| Worst method, cognitive complexity | 59 (`sendMessage`) | under 15 everywhere; `sendMessage` 4 |
+| `McpAsyncServer` | 1,133 lines | 838 |
+| `McpAsyncClient` | 1,170 lines | 937 |
+| `HttpServletStreamableServerTransportProvider` | 1,136 lines, class NCSS 347 | 912, under 300 |
+| Commits | | 27, one hotspot each, tests green after each |
+| Main-source change | | 41 files, +3,471 / -3,391 lines, 15 new package-private or public helper classes |
+
+What the fixes were, by shape:
+- **Reactive chains in named steps.** `sendMessage`, `connect`, `reconnect` each became a
+  sequence of named private methods; the three long lambdas inside them disappeared with
+  them. Same for the stdio read and write loops and the servlet `doPost`/`doGet`/`doDelete`.
+- **Copies between twins.** The stateful and stateless async servers shared thirteen blocks;
+  they now extend one package-private base with an options holder, and completion checks
+  live in one class. The feature records (`McpClientFeatures`, `McpServerFeatures`,
+  `McpStatelessServerFeatures`) got one defaulting helper.
+- **Handler registration as a table.** `McpAsyncClient`'s constructor registered seven
+  handlers one by one; a loop over a table does it, and the schema cache and elicitation
+  defaults moved to their own classes (the acp-java pattern).
+- **Builders for seven- and eight-argument constructors** on the session classes; the
+  servers' constructors take an options object.
+- **Shared base builders** for the HTTP client transports and the servlet transports,
+  declaring the common setters once.
+- **Null-coalescing ternaries** in record canonical constructors (cyclomatic 11 to 12 from
+  one ternary per component) replaced by branch-free helpers.
+
+Caveats for a real adoption, not for the proof:
+- The shared base builders change the erased return type of the common setters (source
+  compatible, binary incompatible for already-compiled callers). The SDK's versioning policy
+  speaks of callers' source; an adopter should decide whether binary compatibility is owed.
+- Two deprecated package-private record constructors were removed; two package-private
+  session constructors became builders; a test subclass in `mcp-test` was updated to pass a
+  configured builder. All recorded in the commit messages.
+- Log categories moved with the extracted code in the servers (message texts unchanged).
+
 ## Not yet done
 
-Two of three decisions are taken (test modules out, fix-all); `CLASS_SIZE` is open. The gate is
-installed in report mode on a local branch and the SDK is not green. Error Prone,
-SpotBugs, ArchUnit and JaCoCo have not been measured here.
+Error Prone, SpotBugs, ArchUnit and JaCoCo have not been measured here. The trial branch
+`guardrails-pmd` in the local clone is not pushed and nothing is proposed upstream.

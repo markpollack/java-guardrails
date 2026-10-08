@@ -1,6 +1,6 @@
 # PMD: size, complexity and duplication
 
-> Status: proven on the MCP Java SDK (2026-10-08, `evidence/mcp-java-sdk.md`) after acp-java.
+> Status: proven end to end on the MCP Java SDK (2026-10-08, `evidence/mcp-java-sdk.md`: measured, decided, installed, green, falsified) after acp-java.
 > Each step is a **script** (deterministic, no model), an **AI** task (judgment), or a **stop**
 > (the owner decides). Maven only; the Gradle slice is not written.
 

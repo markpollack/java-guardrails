@@ -160,11 +160,16 @@ public class Falsify {
 		return p.waitFor();
 	}
 
-	/** The first top-level class file under the first src/main/java, in path order. */
+	/**
+	 * The first top-level class file under the first src/main/java, in path order, in a module
+	 * the gate runs on: a module whose pom sets pmd.skip or cpd.skip (the owner left it out) is
+	 * passed over, because planting there proves nothing.
+	 */
 	static Path firstClassFile(Path target) throws IOException {
 		try (Stream<Path> walk = Files.walk(target)) {
 			return walk.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".java"))
 					.filter(p -> p.toString().contains("/src/main/java/") && !p.toString().contains("/target/"))
+					.filter(p -> !gateSkipped(target, moduleOf(target, p)))
 					.filter(p -> !p.getFileName().toString().equals("package-info.java")
 							&& !p.getFileName().toString().equals("module-info.java"))
 					.filter(p -> {
@@ -178,6 +183,25 @@ public class Falsify {
 					.sorted().findFirst()
 					.orElseThrow(() -> new IllegalStateException("no class under src/main/java below " + target));
 		}
+	}
+
+	/** Whether the module, or a parent pom between it and the target, skips the PMD or CPD goals. */
+	static boolean gateSkipped(Path target, Path module) {
+		for (Path dir = module; dir != null && dir.startsWith(target); dir = dir.getParent()) {
+			Path pom = dir.resolve("pom.xml");
+			try {
+				if (Files.isRegularFile(pom)) {
+					String xml = Files.readString(pom);
+					if (xml.contains("<pmd.skip>true</pmd.skip>") || xml.contains("<cpd.skip>true</cpd.skip>")) {
+						return true;
+					}
+				}
+			}
+			catch (IOException e) {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	/** The nearest ancestor of the file that holds a pom.xml. */
