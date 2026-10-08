@@ -273,7 +273,45 @@ from 0.30 to 0.26 and `jacoco:check` failed on the floor of 0.28, naming it; res
 the floors in, `./mvnw -P errorprone verify` on the gated modules runs all four gates, PMD and
 CPD, Error Prone, SpotBugs and JaCoCo, and passes.
 
+## ArchUnit no-cycles, 2026-10-08, same day
+
+`measure-archunit` imports each gated module's compiled classes and evaluates the kit's two
+rules as a library, so it needs nothing installed.
+
+| Module | Classes | Packages | Package cycles | Class cycles |
+|---|---:|---:|---:|---:|
+| mcp-core | 400 | 10 | 9 | 4 |
+| mcp-json-jackson2 | 5 | 2 | 0 | 0 |
+| mcp-json-jackson3 | 5 | 2 | 0 | 0 |
+
+The core's cycles have three roots: `util` (`Assert`, `McpServiceLoader`,
+`McpUriTemplateManagerFactory`) depends back on `spec` and `json`, which depend on `util`;
+`spec` and `server` depend on each other (handler `TypeRef`s on schema types one way, server
+types referenced from the spec the other); and inside `client`, `McpAsyncClient` and its
+lifecycle and notification helpers reference each other. Breaking them moves types across
+packages, which is public API; the STOP block recommended scoping, and the decision recorded
+as the script's recommendation gates the two cycle-free modules now and leaves the core for a
+session of its own.
+
+**Findings for the kit, three, all in the install shape:**
+1. **ArchUnit's JUnit engine pins a JUnit Platform version.** The SDK is on JUnit 6;
+   `archunit-junit5` brought the older platform, which won by declaration order, and no test
+   could start. The template now uses ArchUnit as a plain library from an ordinary JUnit
+   test; only `com.tngtech.archunit:archunit` is needed.
+2. **An anchor class's package tree misses sibling packages.** `importPackagesOf(anchor)`
+   imports the anchor's package and below; the Jackson modules keep a second package beside
+   it, so a planted cycle between the two was invisible and the test passed vacuously. The
+   template imports the module's own `target/classes` (or Gradle's `build/classes/java/main`).
+3. **The class-slice rule in the old template did not compile**: `SliceAssignment` is not a
+   functional interface. The first run of the measurement caught it.
+
+Falsified on the installed modules: two planted classes in the module's two packages
+referencing each other made `NoCyclesTest` fail naming the cycle; both deleted. The five
+gates, PMD and CPD, Error Prone, SpotBugs, JaCoCo and ArchUnit, run together in
+`./mvnw -P errorprone verify` on the gated modules.
+
 ## Not yet done
 
-ArchUnit has not been measured here. The trial branch `guardrails-pmd` in the local clone is
-not pushed and nothing is proposed upstream.
+`mcp-core`'s 13 dependency cycles are measured, listed and scoped out; breaking them is a
+session with API changes. The layering rule (playbook 20, step 6) is not written. The trial
+branch `guardrails-pmd` in the local clone is not pushed and nothing is proposed upstream.

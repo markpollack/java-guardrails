@@ -19,7 +19,7 @@ threshold will do.
 | Error Prone | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
 | SpotBugs | 1 | **Proven end to end on two code bases**: six real findings on the second, all concurrency or locking. |
 | JaCoCo floors | 2 | **Proven end to end on two code bases**; the measure detects the surefire argLine trap. |
-| ArchUnit | 2 | Template from the first code base; playbook is an outline. |
+| ArchUnit no-cycles | 2 | **Proven on two code bases**; on the second, gating the cycle-free modules while the core's 13 measured cycles wait for their own session. Layers not yet. |
 | NullAway, Lincheck, PIT | 3 | Outlines. |
 
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
@@ -120,11 +120,13 @@ taking the change is your decision.
 ./jbang measure-errorprone <target>                # Error Prone findings by check, classified; needs the profile and JDK 21+
 ./jbang measure-spotbugs <target>                  # SpotBugs: what the gate fails on, and the long tail it leaves out
 ./jbang measure-jacoco <target>                    # coverage per module by its own tests, and the floors to declare
+./jbang measure-archunit <target>                  # package and class dependency cycles per module, with the dependencies that close them
 ./jbang falsify <target> pmd                       # expect red, and the plant named in the report
 ./jbang falsify <target> cpd
 ./jbang falsify <target> errorprone
 ./jbang falsify <target> spotbugs
 ./jbang falsify <target> jacoco
+./jbang falsify <target> archunit
 ```
 
 The aliases resolve from `jbang-catalog.json` in the current directory, so from anywhere else

@@ -13,16 +13,20 @@ import java.util.stream.Stream;
  * step that should fail, and restoring the file byte for byte. Exit 0 means the gate caught the
  * plant (red as expected); exit 1 means the build stayed green, so the gate checks nothing.
  *
- * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone}, {@code spotbugs} or {@code jacoco}.
+ * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone}, {@code spotbugs}, {@code jacoco} or {@code archunit}.
  */
 public class Falsify {
 
 	public static void main(String[] args) throws Exception {
 		Path target = Util.target(args);
 		String gate = args.length > 0 ? args[args.length - 1] : "";
-		if (!List.of("pmd", "cpd", "errorprone", "spotbugs", "jacoco").contains(gate)) {
-			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs | jacoco");
+		if (!List.of("pmd", "cpd", "errorprone", "spotbugs", "jacoco", "archunit").contains(gate)) {
+			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs | jacoco | archunit");
 			System.exit(2);
+		}
+		if (gate.equals("archunit")) {
+			falsifyArchUnit(target);
+			return;
 		}
 		Path file = firstClassFile(target);
 		Path module = moduleOf(target, file);
@@ -108,6 +112,74 @@ public class Falsify {
 			}
 		}
 		return rules;
+	}
+
+	/**
+	 * ArchUnit: a cycle needs two classes in two packages that reference each other, so this
+	 * gate plants two new files in the first gated module's first two packages, runs that
+	 * module's NoCyclesTest, deletes the files, and passes only if the test failed naming the
+	 * planted classes in a cycle.
+	 */
+	static void falsifyArchUnit(Path target) throws Exception {
+		// the first gated module that has the test installed; planting where there is no NoCyclesTest proves nothing
+		Path module = null;
+		try (Stream<Path> walk = Files.walk(target)) {
+			List<Path> tests = walk.filter(p -> p.getFileName().toString().equals("NoCyclesTest.java") && p.toString().contains("/src/test/java/"))
+					.filter(p -> !gateSkipped(target, moduleOf(target, p))).sorted().collect(java.util.stream.Collectors.toList());
+			if (!tests.isEmpty()) {
+				module = moduleOf(target, tests.get(0));
+			}
+		}
+		if (module == null) {
+			System.out.println("falsify archunit: no module has a NoCyclesTest; install it first (playbook 20, step 3)");
+			System.exit(2);
+		}
+		Path sourceRoot = module.resolve("src").resolve("main").resolve("java");
+		List<Path> packageDirs;
+		try (Stream<Path> walk = Files.walk(sourceRoot)) {
+			packageDirs = walk.filter(Files::isDirectory)
+					.filter(d -> { try (Stream<Path> f = Files.list(d)) { return f.anyMatch(x -> x.toString().endsWith(".java") && !x.getFileName().toString().startsWith("module-info")); } catch (IOException e) { return false; } })
+					.sorted().limit(2).collect(java.util.stream.Collectors.toList());
+		}
+		if (packageDirs.size() < 2) {
+			System.out.println("falsify archunit: the module has fewer than two packages; nothing to cycle");
+			System.exit(2);
+		}
+		String pkgA = sourceRoot.relativize(packageDirs.get(0)).toString().replace(java.io.File.separatorChar, '.');
+		String pkgB = sourceRoot.relativize(packageDirs.get(1)).toString().replace(java.io.File.separatorChar, '.');
+		Path a = packageDirs.get(0).resolve("GuardrailsPlantedA.java");
+		Path b = packageDirs.get(1).resolve("GuardrailsPlantedB.java");
+		System.out.println("falsify archunit: planting " + target.relativize(a) + " <-> " + target.relativize(b) + " (module " + target.relativize(module) + ")");
+		int exit;
+		StringBuilder output = new StringBuilder();
+		try {
+			Files.writeString(a, "package " + pkgA + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedA {\n\tstatic Object other() {\n\t\treturn new " + pkgB + ".GuardrailsPlantedB();\n\t}\n}\n");
+			Files.writeString(b, "package " + pkgB + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedB {\n\tstatic Object other() {\n\t\treturn " + pkgA + ".GuardrailsPlantedA.class;\n\t}\n}\n");
+			List<String> command = List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true",
+					"-Dspotbugs.skip=true", "-Djacoco.skip=true", "-pl", target.relativize(module).toString(), "-Dtest=NoCyclesTest",
+					"-Dsurefire.failIfNoSpecifiedTests=false", "test");
+			System.out.println("falsify: " + String.join(" ", command));
+			Process p = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();
+			try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+				String line;
+				while ((line = r.readLine()) != null) {
+					output.append(line).append('\n');
+				}
+			}
+			exit = p.waitFor();
+		}
+		finally {
+			Files.deleteIfExists(a);
+			Files.deleteIfExists(b);
+			System.out.println("falsify archunit: removed the two planted classes");
+		}
+		boolean named = output.toString().contains("Cycle detected") && output.toString().contains("GuardrailsPlanted");
+		if (exit == 0 || !named) {
+			System.out.println("falsify archunit: FAILED; build exit " + exit + ", planted cycle " + (named ? "reported" : "not reported")
+					+ (output.toString().contains("No tests were executed") || !output.toString().contains("NoCyclesTest") ? "; is NoCyclesTest installed in the module?" : "") + "; the gate checks nothing");
+			System.exit(1);
+		}
+		System.out.println("falsify archunit: OK, build red (exit " + exit + ") and NoCyclesTest reported the planted cycle");
 	}
 
 	/** Append a violating member before the type's closing brace. */

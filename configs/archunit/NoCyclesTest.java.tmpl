@@ -1,31 +1,62 @@
 // Template: replace {{ROOT_PACKAGE}} with the module's root package (the common prefix of its
-// packages, which `./jbang assess` prints) and {{MODULE_ANCHOR_CLASS}} with any main class of the
-// module. Drop the result into the module's test sources. ArchUnit (archunit-junit5, test scope)
-// derives the slices from the class files; nothing about the layering is assumed.
+// packages, which `measure-archunit` prints). Drop the result into the module's test sources.
+// Uses ArchUnit as a plain library (`com.tngtech.archunit:archunit`, test scope) from an ordinary
+// JUnit test, not ArchUnit's JUnit engine: the engine pins a JUnit Platform version, which
+// collided with JUnit 6 on the MCP SDK. Imports the module's own compiled main classes, not a
+// package from the classpath: a package can span modules, and an anchor class's package tree
+// misses sibling packages (both found on the MCP SDK).
 package {{ROOT_PACKAGE}};
 
-import com.tngtech.archunit.core.importer.ImportOption;
-import com.tngtech.archunit.junit.AnalyzeClasses;
-import com.tngtech.archunit.junit.ArchTest;
-import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.library.dependencies.SliceAssignment;
+import com.tngtech.archunit.library.dependencies.SliceIdentifier;
+import org.junit.jupiter.api.Test;
 
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * No dependency cycles between the packages of this module, at any depth, and none between
- * classes inside a package. Main sources only.
+ * top-level classes inside a package. Main sources only.
  */
-@AnalyzeClasses(packagesOf = {{MODULE_ANCHOR_CLASS}}.class, importOptions = ImportOption.DoNotIncludeTests.class)
 class NoCyclesTest {
 
-	/** Every package under the root is a slice; a cycle between any two fails. */
-	@ArchTest
-	static final ArchRule noPackageCycles = slices().matching("{{ROOT_PACKAGE}}.(**)").should().beFreeOfCycles();
+	/** This module's compiled main classes: Maven's target/classes, or Gradle's build/classes/java/main. */
+	private static final JavaClasses CLASSES = new ClassFileImporter()
+		.importPath(java.nio.file.Files.isDirectory(java.nio.file.Path.of("target", "classes")) ? java.nio.file.Path.of("target", "classes")
+				: java.nio.file.Path.of("build", "classes", "java", "main"));
 
-	/** Every top-level class is a slice; a cycle between classes of one package fails. */
-	@ArchTest
-	static final ArchRule noClassCycles = slices()
-		.assignedFrom(javaClass -> java.util.Optional.of(javaClass.getName().split("\\$")[0]))
-		.should()
-		.beFreeOfCycles();
+	/** Every top-level class is a slice; its nested classes belong to it. */
+	private static final SliceAssignment TOP_LEVEL_CLASS = new SliceAssignment() {
+		@Override
+		public SliceIdentifier getIdentifierOf(JavaClass javaClass) {
+			return SliceIdentifier.of(javaClass.getName().split("\\$")[0]);
+		}
+
+		@Override
+		public String getDescription() {
+			return "top-level classes";
+		}
+	};
+
+	@Test
+	void importsSomething() {
+		// an empty import would let both rules pass vacuously
+		assertFalse(CLASSES.isEmpty(), "no classes imported for {{ROOT_PACKAGE}}: is the test running from the module directory with main classes compiled?");
+	}
+
+	/** Every package under the root is a slice; a cycle between any two fails. */
+	@Test
+	void noPackageCycles() {
+		slices().matching("{{ROOT_PACKAGE}}.(**)").should().beFreeOfCycles().check(CLASSES);
+	}
+
+	/** A cycle between classes of one package fails. */
+	@Test
+	void noClassCycles() {
+		slices().assignedFrom(TOP_LEVEL_CLASS).should().beFreeOfCycles().check(CLASSES);
+	}
+
 }

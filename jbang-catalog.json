@@ -23,6 +23,10 @@
     "measure-jacoco": {
       "script-ref": "scripts/JacocoMeasure.java",
       "description": "Run each gated module's own tests under the JaCoCo agent, print LINE and BRANCH coverage per module with the floor the kit proposes (measured minus 2), and emit the JACOCO_FLOORS stop; once recorded, print the properties each module declares"
+    },
+    "measure-archunit": {
+      "script-ref": "scripts/ArchUnitMeasure.java",
+      "description": "Import each gated module's compiled classes and evaluate the kit's two no-cycles rules (packages at any depth; classes within a package); print every cycle with the dependencies that close it, and the ARCHUNIT_CYCLES stop"
     }
   }
 }

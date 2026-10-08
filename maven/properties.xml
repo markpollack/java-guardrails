@@ -1,5 +1,6 @@
         <!-- Versions used by the Maven slices in this directory (as proven on acp-java, October 2026).
              Each slice references these properties; copy the ones its plugin needs. -->
+        <!-- the plain library, com.tngtech.archunit:archunit, test scope; not archunit-junit5 (see playbook 20) -->
         <archunit.version>1.4.1</archunit.version>
         <lincheck.version>3.7</lincheck.version>
         <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
