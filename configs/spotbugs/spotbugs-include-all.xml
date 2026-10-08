@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Every finding at any rank: what `measure-spotbugs` swaps in for the full distribution. Never the gate. -->
+<FindBugsFilter xmlns="https://github.com/spotbugs/filter/3.0.0">
+    <Match>
+        <Rank value="1"/>
+    </Match>
+</FindBugsFilter>

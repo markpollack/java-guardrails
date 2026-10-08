@@ -13,6 +13,7 @@
              4.9.8.x plugin runs the current SpotBugs engine below. -->
         <spotbugs-maven-plugin.version>4.9.8.5</spotbugs-maven-plugin.version>
         <spotbugs.version>4.10.4</spotbugs.version>
+        <spotbugs.includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/spotbugs-include.xml</spotbugs.includeFilterFile>
         <!-- Error Prone and NullAway (errorprone profile, JDK 21+ only) -->
         <errorprone.version>2.50.0</errorprone.version>
         <!-- the errorprone profile fails on any finding; measure overrides both for report mode -->

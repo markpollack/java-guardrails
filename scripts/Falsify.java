@@ -13,15 +13,15 @@ import java.util.stream.Stream;
  * step that should fail, and restoring the file byte for byte. Exit 0 means the gate caught the
  * plant (red as expected); exit 1 means the build stayed green, so the gate checks nothing.
  *
- * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd} or {@code errorprone}.
+ * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone} or {@code spotbugs}.
  */
 public class Falsify {
 
 	public static void main(String[] args) throws Exception {
 		Path target = Util.target(args);
 		String gate = args.length > 0 ? args[args.length - 1] : "";
-		if (!List.of("pmd", "cpd", "errorprone").contains(gate)) {
-			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone");
+		if (!List.of("pmd", "cpd", "errorprone", "spotbugs").contains(gate)) {
+			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs");
 			System.exit(2);
 		}
 		Path file = firstClassFile(target);
@@ -45,7 +45,7 @@ public class Falsify {
 			evidence = output.toString(); // the compiler output is the report
 		}
 		else {
-			Path report = module.resolve("target").resolve(gate.equals("pmd") ? "pmd.xml" : "cpd.xml");
+			Path report = module.resolve("target").resolve(gate.equals("pmd") ? "pmd.xml" : gate.equals("cpd") ? "cpd.xml" : "spotbugsXml.xml");
 			evidence = Files.exists(report) ? Files.readString(report) : "";
 		}
 		List<String> fired = rulesFired(gate, evidence, file);
@@ -68,6 +68,18 @@ public class Falsify {
 	static List<String> rulesFired(String gate, String xml, Path plantedFile) {
 		if (gate.equals("cpd")) {
 			return xml.contains("guardrailsPlantedCopy") ? List.of("cpd") : List.of();
+		}
+		if (gate.equals("spotbugs")) {
+			// a BugInstance on the planted method: the report is one line, so find the pattern next to the method name
+			int at = xml.indexOf("NP_ALWAYS_NULL");
+			while (at >= 0) {
+				int end = xml.indexOf("</BugInstance>", at);
+				if (end > 0 && xml.substring(at, end).contains("guardrailsPlantedViolation")) {
+					return List.of("NP_ALWAYS_NULL");
+				}
+				at = xml.indexOf("NP_ALWAYS_NULL", at + 1);
+			}
+			return List.of();
 		}
 		if (gate.equals("errorprone")) {
 			// a diagnostic on the planted file naming the check: "[ERROR] /path/File.java:[12,5] [DeadException] ..."
@@ -92,9 +104,25 @@ public class Falsify {
 	/** Append a violating member before the type's closing brace. */
 	static String plant(String gate, String source) {
 		int close = source.lastIndexOf('}');
-		String member = gate.equals("pmd") ? PLANTED_METHOD : gate.equals("cpd") ? PLANTED_COPIES : PLANTED_DEAD_EXCEPTION;
+		String member = gate.equals("pmd") ? PLANTED_METHOD : gate.equals("cpd") ? PLANTED_COPIES
+				: gate.equals("spotbugs") ? PLANTED_NULL_DEREFERENCE : PLANTED_DEAD_EXCEPTION;
 		return source.substring(0, close) + member + source.substring(close);
 	}
+
+	/**
+	 * A local set to null and dereferenced: SpotBugs' NP_ALWAYS_NULL, rank 5, in the gate by rank,
+	 * found by dataflow with no dependence on the surrounding class (the IS2_INCONSISTENT_SYNC plant
+	 * tried first fires only when the class has other synchronized code), and not an Error Prone
+	 * check (Error Prone's null analysis is NullAway, off outside null-marked packages).
+	 */
+	static final String PLANTED_NULL_DEREFERENCE = """
+
+		// planted by java-guardrails falsify: must never be committed
+		static int guardrailsPlantedViolation() {
+			String planted = null;
+			return planted.length();
+		}
+""";
 
 	/** An exception created and dropped: Error Prone's DeadException, an ERROR by default, a real bug shape. */
 	static final String PLANTED_DEAD_EXCEPTION = """
@@ -190,10 +218,13 @@ public class Falsify {
 
 	/** Runs the gate's check for the module, echoing and collecting its output. */
 	static int run(Path target, Path module, String gate, StringBuilder output) throws IOException, InterruptedException {
+		String mod = target.relativize(module).toString();
 		List<String> command = gate.equals("errorprone")
-				? List.of(Util.mvnw(target), "-B", "-P", "errorprone", "-Dspring-javaformat.skip=true", "-pl", target.relativize(module).toString(), "compile")
-				: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", target.relativize(module).toString(),
-						gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
+				? List.of(Util.mvnw(target), "-B", "-P", "errorprone", "-Dspring-javaformat.skip=true", "-pl", mod, "compile")
+				: gate.equals("spotbugs")
+						// Error Prone off so that the plant reaches SpotBugs; the class must be compiled first
+						? List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-DskipTests", "-P", "!errorprone", "-pl", mod, "compile", "spotbugs:check")
+						: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", mod, gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
 		System.out.println("falsify: " + String.join(" ", command));
 		Process p = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();
 		try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {

@@ -10,11 +10,15 @@
     },
     "falsify": {
       "script-ref": "scripts/Falsify.java",
-      "description": "Plant a violation for a named gate (pmd | cpd | errorprone) in a gated module, run that module's check, restore the file, and pass only if the build went red and the report names the plant"
+      "description": "Plant a violation for a named gate (pmd | cpd | errorprone | spotbugs) in a gated module, run that module's check, restore the file, and pass only if the build went red and the report names the plant"
     },
     "measure-errorprone": {
       "script-ref": "scripts/ErrorProneMeasure.java",
       "description": "Run the kit's Error Prone profile in report mode on a Maven target, group findings by check and module, classify each check as bug or style with Error Prone's own tags, and emit the STOP block for the style checks the owner disables by name"
+    },
+    "measure-spotbugs": {
+      "script-ref": "scripts/SpotBugsMeasure.java",
+      "description": "Run SpotBugs on a Maven target with the kit's gate filter and with every rank, and print what the gate fails on by name and the long tail it leaves out by band and pattern"
     }
   }
 }

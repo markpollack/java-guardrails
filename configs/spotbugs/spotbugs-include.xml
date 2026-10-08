@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ACP Java SDK SpotBugs gate: which findings fail `verify` (spotbugs-maven-plugin, main sources).
+  SpotBugs gate: which findings fail `verify` (spotbugs-maven-plugin, main sources). Calibrated on
+  the ACP Java SDK (2026-10) and confirmed on the MCP Java SDK.
 
   The analysis reports every finding up to rank 20 (maxRank in the parent pom); this filter keeps
   the ones that fail the build:

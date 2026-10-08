@@ -35,7 +35,8 @@
                     <effort>Max</effort>
                     <threshold>Medium</threshold>
                     <maxRank>20</maxRank>
-                    <includeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/spotbugs-include.xml</includeFilterFile>
+                    <!-- a property so that measure can swap in an include-everything filter for the full distribution -->
+                    <includeFilterFile>${spotbugs.includeFilterFile}</includeFilterFile>
                     <includeTests>false</includeTests>
                     <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
                     <failOnError>true</failOnError>
