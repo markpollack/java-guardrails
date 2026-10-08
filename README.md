@@ -92,6 +92,23 @@ Then, in the agent, in the project to gate:
 
 > install quality gates on this project
 
+## Versions and upgrading
+
+A release is a git tag and a GitHub release with notes; there is no jar. Every install channel
+tracks the `main` branch, so the tag is for pinning and for humans.
+
+| Channel | Pin | Upgrade |
+|---|---|---|
+| JBang catalog | `guardrails@markpollack/java-guardrails/v0.1.0` | next run after the cache expires, or `jbang --fresh ...` |
+| Claude Code marketplace | the `version` in `plugin.json` pins until it changes | `claude plugin update java-guardrails@java-guardrails` |
+| `npx skills add` | not by default | `npx skills update java-guardrails` |
+| `git clone` | `git checkout v0.1.0` | `git pull` |
+
+Upgrading the kit never touches your project. The ruleset and plugin block copied into your
+repository are yours. When a new version changes a threshold or adds an exemption shape, run
+`measure` again and compare the kit's `configs/pmd/ruleset.xml` with your `config/pmd/ruleset.xml`;
+taking the change is your decision.
+
 ## Running the scripts yourself
 
 ```
