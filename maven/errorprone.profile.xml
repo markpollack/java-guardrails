@@ -19,7 +19,9 @@
                SystemOut: the stdio transport owns System.out, and anything else printed
                there corrupts the JSON-RPC stream.
              - NullAway: only @NullMarked packages (OnlyNullMarked), in JSpecify mode.
-             - only default-compile: test sources are deliberately unchecked;
+             - only the main compile execution (default-compile; a target that replaces it, as the
+               MCP Java SDK does with java-compile, names its own id here): test sources are
+               deliberately unchecked;
              - never fork the compiler (compiler-plugin then hides every diagnostic). -->
         <profile>
             <id>errorprone</id>
@@ -35,14 +37,21 @@
                             <execution>
                                 <id>default-compile</id>
                                 <configuration>
-                                    <failOnWarning>true</failOnWarning>
+                                    <!-- errorprone.failOnWarning and errorprone.extraArgs are properties so that
+                                         `measure` can run the same profile in report mode:
+                                         -Derrorprone.failOnWarning=false -Derrorprone.extraArgs=-XepAllErrorsAsWarnings -->
+                                    <failOnWarning>${errorprone.failOnWarning}</failOnWarning>
                                     <compilerArgs>
                                         <arg>-XDcompilePolicy=simple</arg>
+                                        <arg>-Xmaxerrs</arg>
+                                        <arg>10000</arg>
+                                        <arg>-Xmaxwarns</arg>
+                                        <arg>10000</arg>
                                         <arg>--should-stop=ifError=FLOW</arg>
                                         <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
-                                        <!-- Disabled, as style for this code base:
-                                             StatementSwitchToExpressionSwitch: arrow or colon switch is a style choice. -->
-                                        <arg>-Xplugin:ErrorProne -Xep:StatementSwitchToExpressionSwitch:OFF -Xep:SystemOut:ERROR -XepOpt:CheckReturnValue:Packages=reactor.core.publisher -XepOpt:CheckReturnValue:ApiExclusionList=${maven.multiModuleProjectDirectory}/config/errorprone/reactor-ignorable-results.txt -Xep:NullAway:ERROR -XepOpt:NullAway:JSpecifyMode=true -XepOpt:NullAway:OnlyNullMarked=true</arg>
+                                        <!-- Disabled, as style, each with its reason in configs/errorprone/disabled-checks.txt:
+                                             StatementSwitchToExpressionSwitch, InlineMeSuggester, MissingSummary. -->
+                                        <arg>-Xplugin:ErrorProne -Xep:StatementSwitchToExpressionSwitch:OFF -Xep:InlineMeSuggester:OFF -Xep:MissingSummary:OFF -Xep:SystemOut:ERROR -XepOpt:CheckReturnValue:Packages=reactor.core.publisher -XepOpt:CheckReturnValue:ApiExclusionList=${maven.multiModuleProjectDirectory}/config/errorprone/reactor-ignorable-results.txt -Xep:NullAway:ERROR -XepOpt:NullAway:JSpecifyMode=true -XepOpt:NullAway:OnlyNullMarked=true ${errorprone.extraArgs}</arg>
                                     </compilerArgs>
                                     <annotationProcessorPaths>
                                         <path>

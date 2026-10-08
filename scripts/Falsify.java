@@ -13,15 +13,15 @@ import java.util.stream.Stream;
  * step that should fail, and restoring the file byte for byte. Exit 0 means the gate caught the
  * plant (red as expected); exit 1 means the build stayed green, so the gate checks nothing.
  *
- * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd} or {@code cpd}.
+ * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd} or {@code errorprone}.
  */
 public class Falsify {
 
 	public static void main(String[] args) throws Exception {
 		Path target = Util.target(args);
 		String gate = args.length > 0 ? args[args.length - 1] : "";
-		if (!List.of("pmd", "cpd").contains(gate)) {
-			System.err.println("falsify: name the gate to falsify: pmd | cpd");
+		if (!List.of("pmd", "cpd", "errorprone").contains(gate)) {
+			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone");
 			System.exit(2);
 		}
 		Path file = firstClassFile(target);
@@ -29,19 +29,33 @@ public class Falsify {
 		byte[] original = Files.readAllBytes(file);
 		System.out.println("falsify " + gate + ": planting in " + target.relativize(file) + " (module " + target.relativize(module) + ")");
 		int exit;
+		StringBuilder output = new StringBuilder();
 		try {
 			Files.write(file, plant(gate, new String(original, java.nio.charset.StandardCharsets.UTF_8))
 					.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-			exit = run(target, module, gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
+			exit = run(target, module, gate, output);
 		}
 		finally {
 			Files.write(file, original);
 			System.out.println("falsify " + gate + ": restored " + target.relativize(file));
 		}
 		// A brownfield module may be red already, so exit code alone proves nothing: the report must name the plant.
-		Path report = module.resolve("target").resolve(gate.equals("pmd") ? "pmd.xml" : "cpd.xml");
-		String xml = Files.exists(report) ? Files.readString(report) : "";
-		List<String> fired = rulesFired(gate, xml);
+		String evidence;
+		if (gate.equals("errorprone")) {
+			evidence = output.toString(); // the compiler output is the report
+		}
+		else {
+			Path report = module.resolve("target").resolve(gate.equals("pmd") ? "pmd.xml" : "cpd.xml");
+			evidence = Files.exists(report) ? Files.readString(report) : "";
+		}
+		List<String> fired = rulesFired(gate, evidence, file);
+		if (gate.equals("errorprone") && fired.isEmpty() && evidence.contains("warnings found and -Werror specified")
+				&& !evidence.contains("] [")) {
+			System.out.println("falsify errorprone: NOT PROVEN; the module has javac warnings of its own (deprecation for removal, classpath), "
+					+ "and under -Werror javac stops before Error Prone runs. The gate is red for those warnings, which is right, "
+					+ "but the plant was not checked. Fix the javac warnings first (playbook 11, step 5), then falsify again.");
+			System.exit(1);
+		}
 		if (exit == 0 || fired.isEmpty()) {
 			System.out.println("falsify " + gate + ": FAILED; build exit " + exit + ", planted violation reported by " + fired
 					+ "; the gate checks nothing");
@@ -50,10 +64,20 @@ public class Falsify {
 		System.out.println("falsify " + gate + ": OK, build red (exit " + exit + ") and the planted violation was reported by " + fired);
 	}
 
-	/** The rules that reported the planted member, from the module's PMD or CPD report. */
-	static List<String> rulesFired(String gate, String xml) {
+	/** The rules that reported the planted member, from the module's PMD or CPD report, or the compiler output for Error Prone. */
+	static List<String> rulesFired(String gate, String xml, Path plantedFile) {
 		if (gate.equals("cpd")) {
 			return xml.contains("guardrailsPlantedCopy") ? List.of("cpd") : List.of();
+		}
+		if (gate.equals("errorprone")) {
+			// a diagnostic on the planted file naming the check: "[ERROR] /path/File.java:[12,5] [DeadException] ..."
+			List<String> checks = new java.util.ArrayList<>();
+			for (String line : xml.split("\n")) {
+				if (line.contains(plantedFile.getFileName().toString() + ":[") && line.contains("[DeadException]")) {
+					checks.add("DeadException");
+				}
+			}
+			return checks;
 		}
 		List<String> rules = new java.util.ArrayList<>();
 		for (String violation : xml.split("<violation ")) {
@@ -68,8 +92,20 @@ public class Falsify {
 	/** Append a violating member before the type's closing brace. */
 	static String plant(String gate, String source) {
 		int close = source.lastIndexOf('}');
-		return source.substring(0, close) + (gate.equals("pmd") ? PLANTED_METHOD : PLANTED_COPIES) + source.substring(close);
+		String member = gate.equals("pmd") ? PLANTED_METHOD : gate.equals("cpd") ? PLANTED_COPIES : PLANTED_DEAD_EXCEPTION;
+		return source.substring(0, close) + member + source.substring(close);
 	}
+
+	/** An exception created and dropped: Error Prone's DeadException, an ERROR by default, a real bug shape. */
+	static final String PLANTED_DEAD_EXCEPTION = """
+
+		// planted by java-guardrails falsify: must never be committed
+		static void guardrailsPlantedViolation(int a) {
+			if (a < 0) {
+				new IllegalArgumentException("negative");
+			}
+		}
+""";
 
 	/** Cognitive 15+, cyclomatic 10+, NCSS 30+, 7+ parameters: every PMD rule in the gate fires. */
 	static final String PLANTED_METHOD = """
@@ -152,11 +188,23 @@ public class Falsify {
 		}
 """;
 
-	static int run(Path target, Path module, String goal) throws IOException, InterruptedException {
-		List<String> command = List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl",
-				target.relativize(module).toString(), goal);
+	/** Runs the gate's check for the module, echoing and collecting its output. */
+	static int run(Path target, Path module, String gate, StringBuilder output) throws IOException, InterruptedException {
+		List<String> command = gate.equals("errorprone")
+				? List.of(Util.mvnw(target), "-B", "-P", "errorprone", "-Dspring-javaformat.skip=true", "-pl", target.relativize(module).toString(), "compile")
+				: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", target.relativize(module).toString(),
+						gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
 		System.out.println("falsify: " + String.join(" ", command));
-		Process p = new ProcessBuilder(command).directory(target.toFile()).inheritIO().start();
+		Process p = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();
+		try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+			String line;
+			while ((line = r.readLine()) != null) {
+				output.append(line).append('\n');
+				if (!line.startsWith("[INFO]")) {
+					System.out.println(line);
+				}
+			}
+		}
 		return p.waitFor();
 	}
 

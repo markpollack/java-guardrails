@@ -15,4 +15,7 @@
         <spotbugs.version>4.10.4</spotbugs.version>
         <!-- Error Prone and NullAway (errorprone profile, JDK 21+ only) -->
         <errorprone.version>2.50.0</errorprone.version>
+        <!-- the errorprone profile fails on any finding; measure overrides both for report mode -->
+        <errorprone.failOnWarning>true</errorprone.failOnWarning>
+        <errorprone.extraArgs>-XepDisableWarningsInGeneratedCode</errorprone.extraArgs>
         <nullaway.version>0.13.8</nullaway.version>

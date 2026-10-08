@@ -16,7 +16,8 @@ threshold will do.
 | Gate | Tier | Status |
 |---|---|---|
 | PMD size, complexity and duplication | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. `evidence/mcp-java-sdk.md` has the numbers. |
-| Error Prone, SpotBugs | 1 | Configs from the first code base; playbooks are outlines. |
+| Error Prone | 1 | Measured and installed on the second code base, playbook written; going green. |
+| SpotBugs | 1 | Configs from the first code base; playbook is an outline. |
 | ArchUnit, JaCoCo floors | 2 | Template and mechanism from the first code base; playbooks are outlines. |
 | NullAway, Lincheck, PIT | 3 | Outlines. |
 
@@ -115,8 +116,10 @@ taking the change is your decision.
 ./jbang alias list                                 # the toolset, from inside the kit
 ./jbang assess  <target>                           # inventory, the kit's gates on this target, next step
 ./jbang measure <target> [--top 20] [--cpd-tokens 50] [--exclude module,module]
+./jbang measure-errorprone <target>                # Error Prone findings by check, classified; needs the profile and JDK 21+
 ./jbang falsify <target> pmd                       # expect red, and the plant named in the report
 ./jbang falsify <target> cpd
+./jbang falsify <target> errorprone
 ```
 
 The aliases resolve from `jbang-catalog.json` in the current directory, so from anywhere else

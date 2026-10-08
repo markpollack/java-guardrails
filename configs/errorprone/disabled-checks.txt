@@ -3,3 +3,7 @@
 # project adds to this list only with a reason; a real exception is a @SuppressWarnings with a
 # reason, never a disabled check.
 StatementSwitchToExpressionSwitch   style: expression switches are not clearer in every case
+InlineMeSuggester                   style: asks every deprecated method for an @InlineMe migration hint; a library's deprecations are
+                                    documented in Javadoc and release notes (MCP Java SDK, 2026-10-08: 42 findings, none a bug)
+MissingSummary                      style: a Javadoc comment without a summary sentence is a documentation gap, not a code defect;
+                                    the Javadoc tooling owns it (MCP Java SDK, 2026-10-08: 20 findings)
