@@ -32,6 +32,7 @@ jobs:
         run: |
           ./jbang version
           ./jbang alias list
+          for s in scripts/*.java; do ./jbang build "$s"; done
           ./jbang scripts/Assess.java .
           ./jbang scripts/Falsify.java . 2>&1 | grep -q 'name the gate' || (echo "falsify usage message missing" && exit 1)
       - name: SKILL.md validates against the Agent Skills spec
