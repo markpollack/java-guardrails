@@ -43,6 +43,28 @@ scripts/     the deterministic parts as Java, run through the JBang wrapper
 evidence/    what each gate found, per code base
 ```
 
+## Installing the kit as a skill
+
+The repository is an [Agent Skill](https://agentskills.io): `SKILL.md` at the root, the scripts,
+configs, playbooks and evidence beside it. Any of these puts the same directory where an agent
+reads it:
+
+```
+# Claude Code, nothing else installed
+/plugin marketplace add markpollack/java-guardrails
+/plugin install java-guardrails@java-guardrails
+
+# any agent that reads the Agent Skills format, with Node present
+npx skills add markpollack/java-guardrails
+
+# by hand
+git clone https://github.com/markpollack/java-guardrails .claude/skills/java-guardrails
+```
+
+Then, in the agent, in the project to gate: "install quality gates on this project". The
+scripts' decisions for the owner are recorded in `<target>/config/guardrails/decisions.md`,
+one `KEY: value` line each; a re-run never re-asks.
+
 ## Running the scripts
 
 The scripts are Java and run through the checked-in JBang wrapper, the same pattern as `mvnw`.
@@ -50,13 +72,17 @@ A JDK is the only prerequisite; dependencies are resolved and cached on first ru
 
 ```
 ./jbang alias list          # the toolset
-./jbang assess  <target>    # inventory the target project
-./jbang measure <target>    # PMD metric distributions and proposed thresholds
-./jbang floors  <target>    # JaCoCo floors from the last verify
-./jbang falsify <target> pmd
+./jbang assess  <target>    # inventory the target project (not yet implemented)
+./jbang measure <target>    # every PMD metric's distribution, worst cases, and cost at the reference threshold
+./jbang measure <target> --exclude mcp-test,conformance-tests --top 20 --cpd-tokens 50
+./jbang floors  <target>    # JaCoCo floors from the last verify (not yet implemented)
+./jbang falsify <target> pmd    # plant a violation, expect the module's pmd:check red and the plant in its report
+./jbang falsify <target> cpd
 ```
 
-On Windows use `jbang.cmd` or `jbang.ps1`.
+On Windows use `jbang.cmd` or `jbang.ps1`. The aliases resolve from `jbang-catalog.json` in the
+current directory, so from anywhere else name the script:
+`<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`.
 
 ## Licence
 

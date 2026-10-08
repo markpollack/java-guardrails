@@ -1,0 +1,14 @@
+{
+  "name": "java-guardrails",
+  "owner": { "name": "Mark Pollack" },
+  "description": "Deterministic quality gates for brownfield Java code bases, installed one gate at a time by an agent that refactors until the build is green.",
+  "plugins": [
+    {
+      "name": "java-guardrails",
+      "source": ".",
+      "description": "PMD, SpotBugs, Error Prone, ArchUnit, JaCoCo, NullAway, Lincheck and PIT gates with calibrated settings, playbooks and Java scripts run through a bundled JBang wrapper.",
+      "category": "code-quality",
+      "tags": ["java", "maven", "pmd", "quality-gate", "brownfield"]
+    }
+  ]
+}

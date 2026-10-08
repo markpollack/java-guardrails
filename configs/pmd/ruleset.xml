@@ -109,6 +109,15 @@
     <rule ref="category/java/design.xml/ExcessiveParameterList">
         <properties>
             <property name="minimum" value="7"/>
+            <!--
+              Exemption: a record's canonical constructor. A record's components are its
+              contract, and the canonical constructor restates them; a protocol schema with
+              nine-component messages is not a long parameter list to fix. Secondary record
+              constructors, class constructors and methods stay measured. Decided on the MCP
+              Java SDK (2026-10-08), where six schema and three feature records failed only here.
+            -->
+            <property name="violationSuppressXPath"
+                      value="./ancestor::ConstructorDeclaration[1][parent::RecordBody][count(FormalParameters/FormalParameter) = count(ancestor::RecordDeclaration[1]/RecordComponentList/RecordComponent)]"/>
         </properties>
     </rule>
 

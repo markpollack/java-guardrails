@@ -24,6 +24,16 @@ The gate before a commit: every alias in `jbang-catalog.json` runs through `./jb
 change is proven against a real target project, with its planted-violation case shown red, before
 it is committed. CI only repeats a run already known to pass locally.
 
+## The repository is the skill
+
+`SKILL.md` at the root makes this directory one Agent Skill (agentskills.io); `.claude-plugin/`
+holds the Claude Code plugin and marketplace manifests pointing at the root. Installers copy or
+link the whole directory, so it stays clean: no build output, nothing private. Before a commit
+that touches `SKILL.md`, the manifests, or the layout: `claude plugin validate .` passes (the
+`CLAUDE.md` warning is known), `npx skills-ref validate .` prints `Valid skill`, and
+`npx skills add <this dir> -a claude-code -y` in a scratch project yields a copy whose `jbang
+measure` runs.
+
 ## Modules
 
 - `playbooks/` one procedure per gate; every step is a script, an AI task, or a stop for the owner.
@@ -31,6 +41,7 @@ it is committed. CI only repeats a run already known to pass locally.
 - `maven/` the Maven-specific slice: plugin blocks, the errorprone profile, `jvm.config`, properties.
 - `scripts/` the deterministic parts, Java, shared helpers through `//SOURCES`.
 - `evidence/` what each gate found, one file per code base.
+- `<target>/config/guardrails/decisions.md` (in the target, not here): the owner's answers to the scripts' STOP blocks, read on every run.
 
 ## Architecture
 
