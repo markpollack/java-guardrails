@@ -19,6 +19,10 @@
     "measure-spotbugs": {
       "script-ref": "scripts/SpotBugsMeasure.java",
       "description": "Run SpotBugs on a Maven target with the kit's gate filter and with every rank, and print what the gate fails on by name and the long tail it leaves out by band and pattern"
+    },
+    "measure-jacoco": {
+      "script-ref": "scripts/JacocoMeasure.java",
+      "description": "Run each gated module's own tests under the JaCoCo agent, print LINE and BRANCH coverage per module with the floor the kit proposes (measured minus 2), and emit the JACOCO_FLOORS stop; once recorded, print the properties each module declares"
     }
   }
 }

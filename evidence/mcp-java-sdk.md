@@ -247,7 +247,33 @@ Falsified on the finished branch: the planted null dereference turned `spotbugs:
 the report named `NP_ALWAYS_NULL` on the planted method; restored. `./mvnw -P errorprone
 verify` on JDK 21 runs all three gates (PMD and CPD, Error Prone, SpotBugs).
 
+## JaCoCo floors, 2026-10-08, same day
+
+Each gated module's own classes exercised by its own tests, LINE and BRANCH floors at
+measured minus 2 points, checked at `verify`. The first run attached no agent: the SDK's
+surefire reads `${surefireArgLine}`, a property the pom defines empty, which Maven
+interpolates before JaCoCo sets it. Surefire's late-bound `@{surefireArgLine}` is the
+one-token fix; `measure-jacoco` detects both forms and the plugin slice takes the property
+name.
+
+| Module | Line | Branch | Floor (line / branch) |
+|---|---:|---:|---|
+| mcp-core | 30.0% (2,045 of 6,815) | 28.6% | 28 / 26 |
+| mcp-json-jackson2 | 68.4% | 76.9% | 66 / 74 |
+| mcp-json-jackson3 | 59.1% | 76.9% | 57 / 74 |
+
+**The core's 30% is a finding, not a gate failure.** The SDK's real test weight is the abstract
+suites published in `mcp-test` (829 tests, Testcontainers), which the owner left out as test
+support and which this machine cannot run. Measured by the kit's rule, the core's own tests
+cover under a third of it. The floor records today's truth and stops it falling; raising it
+means tests in the module that owns the code, which is the next thing an adopter would do.
+
+Falsified: 800 never-executed statements planted in the first core class took the line ratio
+from 0.30 to 0.26 and `jacoco:check` failed on the floor of 0.28, naming it; restored. With
+the floors in, `./mvnw -P errorprone verify` on the gated modules runs all four gates, PMD and
+CPD, Error Prone, SpotBugs and JaCoCo, and passes.
+
 ## Not yet done
 
-ArchUnit and JaCoCo have not been measured here. The trial branch `guardrails-pmd` in the
-local clone is not pushed and nothing is proposed upstream.
+ArchUnit has not been measured here. The trial branch `guardrails-pmd` in the local clone is
+not pushed and nothing is proposed upstream.

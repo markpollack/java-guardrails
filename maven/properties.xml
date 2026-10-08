@@ -3,6 +3,10 @@
         <archunit.version>1.4.1</archunit.version>
         <lincheck.version>3.7</lincheck.version>
         <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+        <!-- surefire's argLine property, late-bound as @{...} in its configuration; see measure-jacoco -->
+        <jacoco.propertyName>argLine</jacoco.propertyName>
+        <!-- the coverage gate's skip follows -DskipTests; a pom that does not define skipTests declares it false -->
+        <skipTests>false</skipTests>
         <!-- Coverage floors; each module overrides them with its own (see the JaCoCo plugin) -->
         <jacoco.minimum.line>1.00</jacoco.minimum.line>
         <jacoco.minimum.branch>1.00</jacoco.minimum.branch>

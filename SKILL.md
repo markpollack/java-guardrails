@@ -41,7 +41,7 @@ The gates, in the order to install them, each with its playbook:
 | 1 | Error Prone defaults at ERROR | `playbooks/11-errorprone.md` | proven on two code bases |
 | 1 | SpotBugs rank 9 plus concurrency | `playbooks/12-spotbugs.md` | proven on two code bases |
 | 2 | ArchUnit no-cycles, then layers | `playbooks/20-archunit.md` | outline |
-| 2 | JaCoCo coverage floors | `playbooks/21-jacoco.md` | outline |
+| 2 | JaCoCo coverage floors | `playbooks/21-jacoco.md` | proven on two code bases |
 | 3 | NullAway, Lincheck, PIT | `playbooks/3x-*.md` | outline |
 
 Follow a playbook step by step. Every step is marked **script**, **AI** or **stop**. Do not
@@ -86,7 +86,8 @@ Do not proceed past a block until it is answered.
 <kit>/jbang <kit>/scripts/PmdMeasure.java   <target> [--top N] [--cpd-tokens N] [--exclude module,module]
 <kit>/jbang <kit>/scripts/ErrorProneMeasure.java <target> [--top N]   # needs the errorprone profile installed and JDK 21+
 <kit>/jbang <kit>/scripts/SpotBugsMeasure.java   <target> [--top N]     # needs the plugin slice installed
-<kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd | errorprone | spotbugs
+<kit>/jbang <kit>/scripts/JacocoMeasure.java     <target>               # needs nothing installed; runs the tests
+<kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd | errorprone | spotbugs | jacoco
 ```
 
 `assess` reads files only and says what is there and what to do next. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and

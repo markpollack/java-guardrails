@@ -13,15 +13,15 @@ import java.util.stream.Stream;
  * step that should fail, and restoring the file byte for byte. Exit 0 means the gate caught the
  * plant (red as expected); exit 1 means the build stayed green, so the gate checks nothing.
  *
- * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone} or {@code spotbugs}.
+ * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone}, {@code spotbugs} or {@code jacoco}.
  */
 public class Falsify {
 
 	public static void main(String[] args) throws Exception {
 		Path target = Util.target(args);
 		String gate = args.length > 0 ? args[args.length - 1] : "";
-		if (!List.of("pmd", "cpd", "errorprone", "spotbugs").contains(gate)) {
-			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs");
+		if (!List.of("pmd", "cpd", "errorprone", "spotbugs", "jacoco").contains(gate)) {
+			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs | jacoco");
 			System.exit(2);
 		}
 		Path file = firstClassFile(target);
@@ -41,8 +41,8 @@ public class Falsify {
 		}
 		// A brownfield module may be red already, so exit code alone proves nothing: the report must name the plant.
 		String evidence;
-		if (gate.equals("errorprone")) {
-			evidence = output.toString(); // the compiler output is the report
+		if (gate.equals("errorprone") || gate.equals("jacoco")) {
+			evidence = output.toString(); // the compiler output, or jacoco:check's rule message, is the report
 		}
 		else {
 			Path report = module.resolve("target").resolve(gate.equals("pmd") ? "pmd.xml" : gate.equals("cpd") ? "cpd.xml" : "spotbugsXml.xml");
@@ -68,6 +68,15 @@ public class Falsify {
 	static List<String> rulesFired(String gate, String xml, Path plantedFile) {
 		if (gate.equals("cpd")) {
 			return xml.contains("guardrailsPlantedCopy") ? List.of("cpd") : List.of();
+		}
+		if (gate.equals("jacoco")) {
+			// jacoco:check names the broken rule: "Rule violated for bundle <module>: lines covered ratio is 0.26, but expected minimum is 0.28"
+			for (String line : xml.split("\n")) {
+				if (line.contains("Rule violated") && line.contains("lines covered ratio")) {
+					return List.of("coverage floor: " + line.substring(line.indexOf("Rule violated")).trim());
+				}
+			}
+			return List.of();
 		}
 		if (gate.equals("spotbugs")) {
 			// a BugInstance on the planted method: the report is one line, so find the pattern next to the method name
@@ -105,7 +114,7 @@ public class Falsify {
 	static String plant(String gate, String source) {
 		int close = source.lastIndexOf('}');
 		String member = gate.equals("pmd") ? PLANTED_METHOD : gate.equals("cpd") ? PLANTED_COPIES
-				: gate.equals("spotbugs") ? PLANTED_NULL_DEREFERENCE : PLANTED_DEAD_EXCEPTION;
+				: gate.equals("spotbugs") ? PLANTED_NULL_DEREFERENCE : gate.equals("jacoco") ? plantedUncoveredLines() : PLANTED_DEAD_EXCEPTION;
 		return source.substring(0, close) + member + source.substring(close);
 	}
 
@@ -123,6 +132,19 @@ public class Falsify {
 			return planted.length();
 		}
 """;
+
+	/**
+	 * Enough never-executed lines to push a module's line coverage more than the floor's 2-point
+	 * margin below what it measured: 800 statements in one method nothing calls. A smaller plant
+	 * would be absorbed by the margin and prove nothing.
+	 */
+	static String plantedUncoveredLines() {
+		StringBuilder b = new StringBuilder("\n\t// planted by java-guardrails falsify: must never be committed\n\tstatic long guardrailsPlantedViolation(long seed) {\n\t\tlong total = seed;\n");
+		for (int i = 1; i <= 800; i++) {
+			b.append("\t\ttotal = total * 31 + ").append(i).append(";\n");
+		}
+		return b.append("\t\treturn total;\n\t}\n").toString();
+	}
 
 	/** An exception created and dropped: Error Prone's DeadException, an ERROR by default, a real bug shape. */
 	static final String PLANTED_DEAD_EXCEPTION = """
@@ -224,6 +246,9 @@ public class Falsify {
 				: gate.equals("spotbugs")
 						// Error Prone off so that the plant reaches SpotBugs; the class must be compiled first
 						? List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-DskipTests", "-P", "!errorprone", "-pl", mod, "compile", "spotbugs:check")
+						: gate.equals("jacoco")
+								// the module's own tests under the agent, then the floor check; the other gates off so only this one answers
+								? List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true", "-Dspotbugs.skip=true", "-pl", mod, "verify")
 						: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", mod, gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
 		System.out.println("falsify: " + String.join(" ", command));
 		Process p = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();

@@ -18,7 +18,8 @@ threshold will do.
 | PMD size, complexity and duplication | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. `evidence/mcp-java-sdk.md` has the numbers. |
 | Error Prone | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
 | SpotBugs | 1 | **Proven end to end on two code bases**: six real findings on the second, all concurrency or locking. |
-| ArchUnit, JaCoCo floors | 2 | Template and mechanism from the first code base; playbooks are outlines. |
+| JaCoCo floors | 2 | **Proven end to end on two code bases**; the measure detects the surefire argLine trap. |
+| ArchUnit | 2 | Template from the first code base; playbook is an outline. |
 | NullAway, Lincheck, PIT | 3 | Outlines. |
 
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
@@ -118,10 +119,12 @@ taking the change is your decision.
 ./jbang measure <target> [--top 20] [--cpd-tokens 50] [--exclude module,module]
 ./jbang measure-errorprone <target>                # Error Prone findings by check, classified; needs the profile and JDK 21+
 ./jbang measure-spotbugs <target>                  # SpotBugs: what the gate fails on, and the long tail it leaves out
+./jbang measure-jacoco <target>                    # coverage per module by its own tests, and the floors to declare
 ./jbang falsify <target> pmd                       # expect red, and the plant named in the report
 ./jbang falsify <target> cpd
 ./jbang falsify <target> errorprone
 ./jbang falsify <target> spotbugs
+./jbang falsify <target> jacoco
 ```
 
 The aliases resolve from `jbang-catalog.json` in the current directory, so from anywhere else

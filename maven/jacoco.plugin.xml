@@ -23,6 +23,11 @@
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
+                        <configuration>
+                            <!-- The property surefire's <argLine> reads, late-bound as @{name}; argLine
+                                 unless the target names its own (the MCP SDK: surefireArgLine). -->
+                            <propertyName>${jacoco.propertyName}</propertyName>
+                        </configuration>
                     </execution>
                     <!-- In verify, after the integration tests (failsafe appends to the same
                          execution data) and before the gate, so the report shows what the
