@@ -1,0 +1,44 @@
+name: Release
+
+# Shape borrowed from agentworks: a gate job, then the release, from a curated notes file.
+# The kit publishes no jar: a release is a tag and a GitHub release whose body is
+# .github/release-notes/<version>.md. Users on the JBang catalog form get the new version on
+# their next run; the Claude Code marketplace and `skills` installers follow the default branch.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.1.0); .github/release-notes/<version>.md must exist'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    name: Kit gate
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release notes exist and versions agree
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          test -f ".github/release-notes/${VERSION}.md" || { echo "::error::.github/release-notes/${VERSION}.md is missing"; exit 1; }
+          grep -q "\"version\": \"${VERSION}\"" .claude-plugin/plugin.json || { echo "::error::.claude-plugin/plugin.json version is not ${VERSION}"; exit 1; }
+          grep -q "version: \"${VERSION}\"" SKILL.md || { echo "::error::SKILL.md metadata.version is not ${VERSION}"; exit 1; }
+      - name: Tag and publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${VERSION}" -m "java-guardrails ${VERSION}"
+          git push origin "v${VERSION}"
+          gh release create "v${VERSION}" --title "java-guardrails ${VERSION}" --notes-file ".github/release-notes/${VERSION}.md"

@@ -11,16 +11,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import net.sourceforge.pmd.PMDConfiguration;
 import net.sourceforge.pmd.PmdAnalysis;
@@ -79,10 +75,6 @@ public class PmdMeasure {
 		}
 	}
 
-	/** A module below the target: its path relative to the target and why it looks like test support, if it does. */
-	record Module(String path, Path sourceRoot, List<String> testSupportReasons) {
-	}
-
 	/** A type that fails class NCSS for a reason other than tangled code, with the facts that say so. */
 	record ClassSizeCase(String simpleName, String binaryName, int ncss, String shape, String recommendation) {
 	}
@@ -103,11 +95,6 @@ public class PmdMeasure {
 			"ASTDoStatement", "ASTTryStatement", "ASTThrowStatement", "ASTSwitchStatement", "ASTBreakStatement",
 			"ASTContinueStatement", "ASTSynchronizedStatement", "ASTYieldStatement", "ASTLocalClassStatement");
 
-	/** Test libraries whose presence without {@code <scope>test</scope>} marks a module as test support. */
-	static final Pattern TEST_LIBRARY = Pattern.compile(
-			"<artifactId>(junit[a-z0-9-]*|assertj[a-z0-9-]*|mockito[a-z0-9-]*|testcontainers[a-z0-9-]*|hamcrest[a-z0-9-]*|testng|spring-boot-starter-test|spring-test)</artifactId>");
-	static final Pattern TEST_MODULE_NAME = Pattern.compile("(^|[-_/])(test|tests|testing|test-support|testkit|conformance)([-_/]|$)");
-
 	static final int FIT_PERCENT = 5;
 	static final int FIX_ALL_LIMIT = 100;
 	static final int CLASS_NCSS_REFERENCE = 300;
@@ -120,11 +107,11 @@ public class PmdMeasure {
 			System.err.println("measure: not a directory: " + target);
 			System.exit(2);
 		}
-		Decisions decisions = Decisions.read(target);
-		List<Module> allModules = modules(target);
+		Util.Decisions decisions = Util.Decisions.read(target);
+		List<Util.Module> allModules = Util.modules(target);
 		Set<String> excluded = new HashSet<>(listOption(args, "--exclude"));
 		excluded.addAll(decisions.excludedModules());
-		List<Module> gated = allModules.stream().filter(m -> excluded.stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/"))).collect(Collectors.toList());
+		List<Util.Module> gated = allModules.stream().filter(m -> excluded.stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/"))).collect(Collectors.toList());
 		if (gated.isEmpty()) {
 			System.err.println("measure: no src/main/java below " + target + " outside the excluded modules");
 			System.exit(2);
@@ -133,7 +120,7 @@ public class PmdMeasure {
 		System.out.println("# Measurement: " + target.getFileName());
 		System.out.println();
 		System.out.println("Target `" + target + "`, Java " + javaVersion + ", PMD 7.28.0, main sources only.");
-		System.out.println("Modules measured: " + gated.stream().map(Module::path).collect(Collectors.joining(", ")));
+		System.out.println("Modules measured: " + gated.stream().map(Util.Module::path).collect(Collectors.joining(", ")));
 		if (!excluded.isEmpty()) {
 			System.out.println("Modules left out: " + excluded.stream().sorted().collect(Collectors.joining(", ")));
 		}
@@ -169,7 +156,7 @@ public class PmdMeasure {
 
 	// ---- PMD metrics, in-process ---------------------------------------------------------------
 
-	static void analyse(Path target, List<Module> modules, String javaVersion) throws IOException {
+	static void analyse(Path target, List<Util.Module> modules, String javaVersion) throws IOException {
 		PMDConfiguration config = new PMDConfiguration();
 		config.setDefaultLanguageVersion(JavaLanguageModule.getInstance().getVersion(javaVersion));
 		config.setIgnoreIncrementalAnalysis(true);
@@ -180,7 +167,7 @@ public class PmdMeasure {
 		MeasureRule rule = new MeasureRule();
 		try (PmdAnalysis pmd = PmdAnalysis.create(config)) {
 			pmd.addRuleSet(RuleSet.forSingleRule(rule));
-			for (Module module : modules) {
+			for (Util.Module module : modules) {
 				pmd.files().addDirectory(module.sourceRoot());
 			}
 			Report report = pmd.performAnalysisAndCollectReport();
@@ -232,7 +219,7 @@ public class PmdMeasure {
 	static final class MeasureRule extends AbstractJavaRule {
 		/** Static because PMD copies rules per thread through the no-arg constructor. */
 		static Path TARGET;
-		static List<Module> MODULES;
+		static List<Util.Module> MODULES;
 
 		MeasureRule() {
 			setName("Measure");
@@ -380,16 +367,16 @@ public class PmdMeasure {
 
 		private static String module(Node n) {
 			Path file = Path.of(n.getReportLocation().getFileId().getAbsolutePath());
-			return MODULES.stream().filter(m -> file.startsWith(m.sourceRoot())).map(Module::path).findFirst().orElse(".");
+			return MODULES.stream().filter(m -> file.startsWith(m.sourceRoot())).map(Util.Module::path).findFirst().orElse(".");
 		}
 	}
 
 	// ---- CPD, in-process ------------------------------------------------------------------------
 
-	static List<Item> cpd(Path target, List<Module> modules, String javaVersion, int minimumTokens, int top) throws IOException {
+	static List<Item> cpd(Path target, List<Util.Module> modules, String javaVersion, int minimumTokens, int top) throws IOException {
 		List<Item> blocks = new ArrayList<>();
 		StringBuilder perModule = new StringBuilder();
-		for (Module module : modules) {
+		for (Util.Module module : modules) {
 			CPDConfiguration config = new CPDConfiguration();
 			config.setMinimumTileSize(minimumTokens);
 			config.setDefaultLanguageVersion(JavaLanguageModule.getInstance().getVersion(javaVersion));
@@ -489,7 +476,7 @@ public class PmdMeasure {
 	}
 
 	/** Class-NCSS items minus the types the owner exempted (the ruleset carries the matching exclusion). */
-	static List<Item> applyClassSizeExemptions(List<Item> items, Decisions d) {
+	static List<Item> applyClassSizeExemptions(List<Item> items, Util.Decisions d) {
 		Set<String> exempt = d.classSizeExempt();
 		if (exempt.isEmpty()) {
 			return items;
@@ -510,21 +497,21 @@ public class PmdMeasure {
 	 * line to record in {@code config/guardrails/decisions.md}. The agent relays a block verbatim
 	 * and does not proceed past it.
 	 */
-	static void stops(Path target, List<Module> all, List<Module> gated, List<Metric> metrics, List<Metric> unfit,
-			List<Item> cpdBlocks, Decisions d) {
+	static void stops(Path target, List<Util.Module> all, List<Util.Module> gated, List<Metric> metrics, List<Metric> unfit,
+			List<Item> cpdBlocks, Util.Decisions d) {
 		List<String> blocks = new ArrayList<>();
 
-		List<Module> testSupport = all.stream().filter(m -> !m.testSupportReasons().isEmpty()).collect(Collectors.toList());
+		List<Util.Module> testSupport = all.stream().filter(m -> !m.testSupportReasons().isEmpty()).collect(Collectors.toList());
 		if (!testSupport.isEmpty() && !d.has("TEST_SUPPORT_MODULES")) {
 			StringBuilder b = new StringBuilder("STOP TEST_SUPPORT_MODULES\n");
 			b.append("  These modules keep test code in src/main/java, so the gate would make the agent refactor tests:\n");
-			for (Module m : testSupport) {
+			for (Util.Module m : testSupport) {
 				long pmd = metrics.stream().flatMap(x -> x.items().stream().filter(i -> i.module().equals(m.path()) && i.value() >= x.reference())).count();
 				long cpd = cpdBlocks.stream().filter(i -> i.module().equals(m.path()) && i.value() >= 100).count();
 				b.append("    ").append(m.path()).append(": ").append(String.join("; ", m.testSupportReasons()))
 						.append(" (").append(pmd).append(" PMD, ").append(cpd).append(" CPD at the reference)\n");
 			}
-			String names = testSupport.stream().map(Module::path).collect(Collectors.joining(", "));
+			String names = testSupport.stream().map(Util.Module::path).collect(Collectors.joining(", "));
 			b.append("  Options: (a) leave them out of the gate   (b) gate them as published code\n");
 			b.append("  Recommendation: (a)\n");
 			b.append("  Record as:  TEST_SUPPORT_MODULES: exclude ").append(names).append("\n");
@@ -552,7 +539,7 @@ public class PmdMeasure {
 			b.append("  Recommendation: ").append(total <= FIX_ALL_LIMIT ? "(a), the count is below " + FIX_ALL_LIMIT : "(b), the count is above " + FIX_ALL_LIMIT).append("\n");
 			b.append("  Record as:  PMD_MECHANISM: fix-all\n");
 			b.append("          or  PMD_MECHANISM: ratchet\n");
-			b.append("          or  PMD_MECHANISM: scope ").append(gated.stream().map(Module::path).collect(Collectors.joining(", "))).append("\n");
+			b.append("          or  PMD_MECHANISM: scope ").append(gated.stream().map(Util.Module::path).collect(Collectors.joining(", "))).append("\n");
 			blocks.add(b.toString());
 		}
 
@@ -590,7 +577,7 @@ public class PmdMeasure {
 		System.out.println("## Stops");
 		System.out.println();
 		if (blocks.isEmpty()) {
-			System.out.println("None: every decision this measurement needs is recorded in " + target.relativize(Decisions.path(target)) + ".");
+			System.out.println("None: every decision this measurement needs is recorded in " + target.relativize(Util.Decisions.path(target)) + ".");
 			if (d.has("PMD_MECHANISM") && d.get("PMD_MECHANISM").startsWith("ratchet")) {
 				System.out.println();
 				System.out.println("Ratchet values (maxAllowedViolations per module at today's count):");
@@ -604,7 +591,7 @@ public class PmdMeasure {
 			return;
 		}
 		System.out.println("Relay each block below to the owner as written, record the answer in `"
-				+ target.relativize(Decisions.path(target)) + "`, then run measure again.");
+				+ target.relativize(Util.Decisions.path(target)) + "`, then run measure again.");
 		System.out.println();
 		System.out.println("```");
 		for (String b : blocks) {
@@ -614,140 +601,7 @@ public class PmdMeasure {
 		System.out.println("```");
 	}
 
-	// ---- Decisions file ---------------------------------------------------------------------------
-
-	/** {@code config/guardrails/decisions.md} in the target: one {@code KEY: value} line per decision. */
-	static final class Decisions {
-		private static final Pattern LINE = Pattern.compile("^([A-Z][A-Z0-9_]+):\\s*(.*?)\\s*$");
-		private final Map<String, String> values = new LinkedHashMap<>();
-		private final Path file;
-
-		private Decisions(Path file) {
-			this.file = file;
-		}
-
-		static Path path(Path target) {
-			return target.resolve("config").resolve("guardrails").resolve("decisions.md");
-		}
-
-		static Decisions read(Path target) throws IOException {
-			Decisions d = new Decisions(path(target));
-			if (Files.isRegularFile(d.file)) {
-				for (String line : Files.readAllLines(d.file)) {
-					Matcher m = LINE.matcher(line);
-					if (m.matches()) {
-						// a trailing "(2026-10-08)" is the date the decision was taken, not part of the value
-						d.values.put(m.group(1), m.group(2).replaceFirst("\\s*\\([^)]*\\)\\s*$", ""));
-					}
-				}
-			}
-			return d;
-		}
-
-		boolean has(String key) {
-			return values.containsKey(key);
-		}
-
-		String get(String key) {
-			return values.getOrDefault(key, "");
-		}
-
-		List<String> excludedModules() {
-			String v = get("TEST_SUPPORT_MODULES");
-			if (!v.startsWith("exclude")) {
-				return List.of();
-			}
-			return Stream.of(v.substring("exclude".length()).split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toList());
-		}
-
-		Set<String> classSizeExempt() {
-			return classSize("exempt");
-		}
-
-		Set<String> classSizeRefactor() {
-			return classSize("refactor");
-		}
-
-		/** {@code CLASS_SIZE: exempt McpSchema; refactor McpServer} */
-		private Set<String> classSize(String verb) {
-			Set<String> names = new HashSet<>();
-			for (String part : get("CLASS_SIZE").split(";")) {
-				String p = part.trim();
-				if (p.startsWith(verb + " ")) {
-					for (String n : p.substring(verb.length() + 1).split(",")) {
-						names.add(n.trim());
-					}
-				}
-			}
-			return names;
-		}
-
-		void print() {
-			if (values.isEmpty()) {
-				System.out.println("Decisions: none recorded yet (" + file + ").");
-			}
-			else {
-				System.out.println("Decisions from `" + file + "`:");
-				values.forEach((k, v) -> System.out.println("  " + k + ": " + v));
-			}
-			System.out.println();
-		}
-	}
-
-	// ---- Target discovery -----------------------------------------------------------------------
-
-	/**
-	 * Every module below the target that has a src/main/java, with the reasons it looks like test
-	 * support: its name, test libraries on its compile classpath, or most of its classes named
-	 * like tests. Build output and vendored trees are skipped.
-	 */
-	static List<Module> modules(Path target) throws IOException {
-		List<Path> roots;
-		try (Stream<Path> walk = Files.walk(target)) {
-			roots = walk.filter(Files::isDirectory)
-					.filter(p -> p.endsWith(Path.of("src", "main", "java")))
-					.filter(p -> !p.toString().contains("/target/") && !p.toString().contains("/build/")
-							&& !p.toString().contains("/.git/") && !p.toString().contains("/node_modules/"))
-					.sorted().collect(Collectors.toList());
-		}
-		List<Module> modules = new ArrayList<>();
-		for (Path root : roots) {
-			Path moduleDir = root.getParent().getParent().getParent();
-			String path = target.equals(moduleDir) ? "." : target.relativize(moduleDir).toString();
-			modules.add(new Module(path, root, testSupportReasons(path, moduleDir, root)));
-		}
-		return modules;
-	}
-
-	static List<String> testSupportReasons(String path, Path moduleDir, Path root) throws IOException {
-		List<String> reasons = new ArrayList<>();
-		if (TEST_MODULE_NAME.matcher(path).find()) {
-			reasons.add("named like a test module");
-		}
-		Path pom = moduleDir.resolve("pom.xml");
-		if (Files.isRegularFile(pom)) {
-			String xml = Files.readString(pom);
-			List<String> compileScoped = new ArrayList<>();
-			for (String dep : xml.split("<dependency>")) {
-				Matcher m = TEST_LIBRARY.matcher(dep);
-				if (m.find() && !dep.contains("<scope>test</scope>")) {
-					compileScoped.add(m.group(1));
-				}
-			}
-			if (!compileScoped.isEmpty()) {
-				reasons.add("test libraries on the compile classpath: " + String.join(", ", compileScoped));
-			}
-		}
-		List<Path> classes;
-		try (Stream<Path> walk = Files.walk(root)) {
-			classes = walk.filter(p -> p.toString().endsWith(".java") && !p.getFileName().toString().equals("package-info.java")).collect(Collectors.toList());
-		}
-		long testNamed = classes.stream().filter(p -> p.getFileName().toString().matches(".*(Test|Tests|IT)\\.java")).count();
-		if (!classes.isEmpty() && testNamed * 2 >= classes.size()) {
-			reasons.add(testNamed + " of " + classes.size() + " classes named like tests");
-		}
-		return reasons;
-	}
+	// ---- Options ----------------------------------------------------------------------------------
 
 	static int intOption(String[] args, String name, int dflt) {
 		for (int i = 0; i < args.length - 1; i++) {

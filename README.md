@@ -1,53 +1,80 @@
 # java-guardrails
 
-Deterministic quality gates for brownfield Java code bases, with calibrated settings and a method for
-installing them one at a time. The tools are old friends (PMD, SpotBugs, Error Prone, NullAway,
-ArchUnit, JaCoCo, Lincheck, PIT). Out of the box their signal-to-noise ratio is poor; the settings
-here were iterated on a real code base until the build failed on what matters and nothing else.
+Deterministic quality gates for Java code bases that already exist, installed one at a time by
+an AI coding agent that then refactors until the build is green.
 
-The point is to give an AI coding agent a concrete target instead of a conversation: a gate is a
-command whose exit code is the goal. The tools measure and gate; the agent refactors and triages.
-No intelligence is spent where a threshold will do.
+The tools are old friends: PMD and its copy-paste detector, SpotBugs, Error Prone, ArchUnit,
+JaCoCo, NullAway, Lincheck, PIT. Out of the box their signal-to-noise ratio is poor. The
+settings here were calibrated on a real code base until the build failed on what matters and
+nothing else, then confirmed unchanged on a second one. The point is to give an agent a target
+instead of a conversation: a gate is a command whose exit code is the goal. The tools measure
+and gate; the agent refactors and triages; the owner decides; no intelligence is spent where a
+threshold will do.
 
-## The loop, for every gate
+## Status
 
-1. Add the plugin in report mode.
-2. Measure the distribution; set each threshold at the knee, where the worst code fails and ordinary code passes.
-3. Make the build green: fix, never baseline. A false positive is excluded narrowly with a written reason.
-4. Falsify: plant a violation, see the build fail, revert.
-5. Flip to fail and commit with the measurement in the body.
-
-## Three ways to go green on existing code
-
-- **Report then gate.** Fix every violation now. Right for small counts.
-- **Ratchet.** `maxAllowedViolations` (PMD, SpotBugs) or coverage floors (JaCoCo) at today's level; fail on any increase; lower as fixes land.
-- **Scope by module or package.** Gate one module, clean it, move on. NullAway's `OnlyNullMarked` is the same idea for packages.
-
-## Tiers
-
-| Tier | Gates | Why |
+| Gate | Tier | Status |
 |---|---|---|
-| 1, copies as-is | PMD complexity and CPD, Error Prone defaults, SpotBugs rank 9 plus concurrency | The config files travel unchanged; measured thresholds are the only per-repo input |
-| 2, one prompt each | ArchUnit no-cycles then layers, JaCoCo floors | Needs one fact from the code base (root package, measured coverage) and an owner decision on layers |
-| 3, optional | NullAway, Lincheck, PIT | Pays on libraries with concurrency or a stable core; expensive to apply |
+| PMD size, complexity and duplication | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. `evidence/mcp-java-sdk.md` has the numbers. |
+| Error Prone, SpotBugs | 1 | Configs from the first code base; playbooks are outlines. |
+| ArchUnit, JaCoCo floors | 2 | Template and mechanism from the first code base; playbooks are outlines. |
+| NullAway, Lincheck, PIT | 3 | Outlines. |
 
-`evidence/acp-java.md` records what each gate found on the first code base.
+Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
+install does not.
 
-## Layout
+## What happens when you use it
 
-```
-playbooks/   one procedure per gate; each step is a script, an AI task, or a stop for the owner
-configs/     build-tool neutral files copied into <target>/config/: PMD ruleset, SpotBugs filters, Error Prone lists, ArchUnit template
-maven/       the Maven-specific slice: plugin blocks, the errorprone profile, jvm.config, properties
-scripts/     the deterministic parts as Java, run through the JBang wrapper
-evidence/    what each gate found, per code base
-```
+You install the kit as a skill in your coding agent, open a Maven project, and ask for quality
+gates. The agent then follows `playbooks/10-pmd.md`:
 
-## Installing the kit as a skill
+1. **Assess.** A script inventories the project: modules, test-support modules, Java level,
+   tooling already in the build. Nothing is run.
+2. **Measure.** A script computes every metric the gate will enforce for every method, class
+   and lambda, and prints the distribution, the worst cases by name, and the cost at the
+   kit's threshold: how many fail, and whether the threshold fits this code base.
+3. **You decide.** The script ends with one `STOP` block per decision only you can make, with
+   the data, the options and a recommendation. The agent relays it as written and waits:
 
-The repository is an [Agent Skill](https://agentskills.io): `SKILL.md` at the root, the scripts,
-configs, playbooks and evidence beside it. Any of these puts the same directory where an agent
-reads it:
+   ```
+   STOP PMD_MECHANISM
+     Cost of going green in the measured modules: 57 PMD violations and 33 CPD blocks.
+       mcp-core: 57 PMD
+     Options: (a) fix-all: every violation fixed in the code, one hotspot per commit
+              (b) ratchet: maxAllowedViolations at today's count per module, lowered as fixes land
+              (c) scope: gate the listed modules first, the rest later
+     Recommendation: (a), the count is below 100
+     Record as:  PMD_MECHANISM: fix-all
+   ```
+
+   Your answers go into `config/guardrails/decisions.md` in your project. A re-run never
+   re-asks; changing a decision is an edit to that file.
+4. **Install in report mode.** The agent copies `config/pmd/ruleset.xml` into your project
+   (every threshold has its reason beside it; you own the file) and adds the plugin block to
+   your root pom.
+5. **Falsify.** A script plants a violation, runs the gate, and passes only if the build went
+   red and the report names the plant. A gate that never failed may be checking nothing.
+6. **Go green.** The agent fixes violations in the code, one hotspot per commit with your tests
+   green after each. Never a baseline file, never a suppression comment. A false positive is
+   excluded by a written structural rule in the ruleset, and only after you said so.
+7. **Flip to fail.** `./mvnw verify` now fails on any violation, and that is the target every
+   later change is held to.
+
+What lands in your repository: `config/pmd/ruleset.xml`, `config/guardrails/decisions.md`,
+three properties and one plugin block in the root pom, and the refactoring commits.
+
+On the MCP Java SDK this took the core module from 57 violations and 33 duplicate blocks to
+zero in 27 commits, with the worst method going from cognitive complexity 59 to 4.
+
+## Install
+
+Prerequisites: a JDK 17 or newer and a Maven project with the Maven wrapper (`mvnw`). The kit's
+scripts are Java, run through a bundled JBang wrapper that resolves its own dependencies on
+first run. Nothing else is needed, not JBang, not Node, not Python.
+
+The repository is an [Agent Skill](https://agentskills.io): `SKILL.md` at the root with the
+scripts, configs, playbooks and evidence beside it. Any of these puts the same directory where
+your agent reads it:
 
 ```
 # Claude Code, nothing else installed
@@ -57,32 +84,55 @@ reads it:
 # any agent that reads the Agent Skills format, with Node present
 npx skills add markpollack/java-guardrails
 
-# by hand
+# by hand, into the agent's skills folder
 git clone https://github.com/markpollack/java-guardrails .claude/skills/java-guardrails
 ```
 
-Then, in the agent, in the project to gate: "install quality gates on this project". The
-scripts' decisions for the owner are recorded in `<target>/config/guardrails/decisions.md`,
-one `KEY: value` line each; a re-run never re-asks.
+Then, in the agent, in the project to gate:
 
-## Running the scripts
+> install quality gates on this project
 
-The scripts are Java and run through the checked-in JBang wrapper, the same pattern as `mvnw`.
-A JDK is the only prerequisite; dependencies are resolved and cached on first run.
+## Running the scripts yourself
 
 ```
-./jbang alias list          # the toolset
-./jbang assess  <target>    # inventory the target project (not yet implemented)
-./jbang measure <target>    # every PMD metric's distribution, worst cases, and cost at the reference threshold
-./jbang measure <target> --exclude mcp-test,conformance-tests --top 20 --cpd-tokens 50
-./jbang floors  <target>    # JaCoCo floors from the last verify (not yet implemented)
-./jbang falsify <target> pmd    # plant a violation, expect the module's pmd:check red and the plant in its report
+./jbang alias list                                 # the toolset, from inside the kit
+./jbang assess  <target>                           # inventory, the kit's gates on this target, next step
+./jbang measure <target> [--top 20] [--cpd-tokens 50] [--exclude module,module]
+./jbang falsify <target> pmd                       # expect red, and the plant named in the report
 ./jbang falsify <target> cpd
 ```
 
-On Windows use `jbang.cmd` or `jbang.ps1`. The aliases resolve from `jbang-catalog.json` in the
-current directory, so from anywhere else name the script:
-`<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`.
+The aliases resolve from `jbang-catalog.json` in the current directory, so from anywhere else
+name the script: `<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`. On Windows use
+`jbang.cmd` or `jbang.ps1`.
+
+## The ideas behind it
+
+- **Thresholds are constants, not knees.** Calibrated once, confirmed on each code base by a
+  fit check (at most 5% of the population fails, and what fails is the worst code). A gap
+  search for a "natural" threshold was tried and removed: on heavy-tailed metrics it always
+  proposed sparing the worst code. A threshold that does not fit is a stop, recorded as
+  evidence either way; it is never moved to spare the worst code.
+- **Three ways to go green on existing code.** Fix all now, for small counts. Ratchet:
+  `maxAllowedViolations` or coverage floors at today's level, lowered as fixes land. Scope by
+  module: gate the core first.
+- **Exemptions are shapes, never names.** "A final class with no instance fields whose nested
+  types are records, enums, interfaces and constants holders" exempts a protocol schema and
+  nothing else. Each is an XPath in your ruleset with the reason beside it.
+- **The measurement equals the gate.** `measure`'s counts are checked against the real plugin's
+  report rule by rule. A measurement not checked against the gate is an opinion.
+
+## Layout
+
+```
+SKILL.md         the skill: what an agent reads first
+playbooks/       one procedure per gate; every step is a script, an AI task, or a stop for the owner
+configs/         build-tool neutral files copied into <target>/config/: PMD ruleset, SpotBugs filters, Error Prone lists, ArchUnit template
+maven/           the Maven-specific slice: plugin blocks, the errorprone profile, jvm.config, properties
+scripts/         the deterministic parts as Java, run through the JBang wrapper
+evidence/        what each gate found on each code base; the source of the thresholds
+.claude-plugin/  Claude Code plugin and marketplace manifests pointing at this directory
+```
 
 ## Licence
 

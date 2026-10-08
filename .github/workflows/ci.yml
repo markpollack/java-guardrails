@@ -1,0 +1,41 @@
+name: CI
+
+# The kit's own gate, the same checks run locally before a commit (see AGENTS.md):
+# every script compiles and runs through the wrapper, the skill validates against the
+# Agent Skills spec, and the catalog lists only working verbs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kit-gate:
+    name: Kit gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Set up Node (for the Agent Skills validator only)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Scripts compile and run through the wrapper
+        run: |
+          ./jbang version
+          ./jbang alias list
+          ./jbang scripts/Assess.java .
+          ./jbang scripts/Falsify.java . 2>&1 | grep -q 'name the gate' || (echo "falsify usage message missing" && exit 1)
+      - name: SKILL.md validates against the Agent Skills spec
+        run: npx -y skills-ref validate .
+      - name: Manifests are valid JSON and point at the root
+        run: |
+          python3 -c "import json; m=json.load(open('.claude-plugin/marketplace.json')); assert m['plugins'][0]['source']=='.'; json.load(open('.claude-plugin/plugin.json'))"

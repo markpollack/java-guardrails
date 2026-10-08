@@ -82,13 +82,12 @@ Do not proceed past a block until it is answered.
 ## Scripts
 
 ```
+<kit>/jbang <kit>/scripts/Assess.java       <target>      # inventory and the next step; run this first
 <kit>/jbang <kit>/scripts/PmdMeasure.java   <target> [--top N] [--cpd-tokens N] [--exclude module,module]
 <kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd
-<kit>/jbang <kit>/scripts/Assess.java       <target>      # not yet implemented
-<kit>/jbang <kit>/scripts/JacocoFloors.java <target>      # not yet implemented
 ```
 
-`measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
+`assess` reads files only and says what is there and what to do next. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
 needs no build. `falsify` plants in the first class of the first module, runs that module's check
 goal through the target's `mvnw`, restores the file byte for byte, and passes only if the build
 went red and the module's report names the plant.

@@ -1,8 +1,16 @@
 {
   "aliases": {
-    "assess":  { "script-ref": "scripts/Assess.java",       "description": "Inventory a target project: build tool, JDKs, modules, root packages, quality plugins already present" },
-    "measure": { "script-ref": "scripts/PmdMeasure.java",   "description": "Run PMD with every threshold at 1 and print each metric's distribution and proposed knee" },
-    "floors":  { "script-ref": "scripts/JacocoFloors.java", "description": "Read each module's jacoco.xml and print the coverage floor: measured minus 2 points" },
-    "falsify": { "script-ref": "scripts/Falsify.java",      "description": "Plant a violation for a named gate, run verify, expect red, revert" }
+    "assess": {
+      "script-ref": "scripts/Assess.java",
+      "description": "Inventory a target project: build tool, Java level, modules, test-support modules, quality tooling already present, the kit's gates, decisions so far, and the next step"
+    },
+    "measure": {
+      "script-ref": "scripts/PmdMeasure.java",
+      "description": "Measure every method, class and lambda in the target's main sources against the kit's PMD thresholds; print distributions, worst cases, the cost per threshold with a fit check, duplicate blocks per module, and STOP blocks for the decisions the owner has not recorded"
+    },
+    "falsify": {
+      "script-ref": "scripts/Falsify.java",
+      "description": "Plant a violation for a named gate (pmd | cpd) in a gated module, run that module's check goal, restore the file, and pass only if the build went red and the report names the plant"
+    }
   }
 }
