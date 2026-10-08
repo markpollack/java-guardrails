@@ -25,6 +25,44 @@ threshold will do.
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
 install does not.
 
+## Getting started
+
+You need a JDK 17 or newer (21 or newer for the Error Prone gate), a Maven project with the
+Maven wrapper, and a coding agent that reads Agent Skills (Claude Code, or any of the agents the
+`skills` CLI installs into). Nothing else: not JBang, not Node, not Python.
+
+1. **Install the kit as a skill.** In Claude Code:
+
+   ```
+   /plugin marketplace add markpollack/java-guardrails
+   /plugin install java-guardrails@java-guardrails
+   ```
+
+   Any other agent, with Node present: `npx skills add markpollack/java-guardrails`.
+   By hand: `git clone https://github.com/markpollack/java-guardrails .claude/skills/java-guardrails`.
+
+2. **Open your project in the agent and ask for the first gate:**
+
+   > install the PMD quality gate on this project
+
+   The agent reads `playbooks/10-pmd.md` and runs the kit's scripts. The first run takes a few
+   minutes: measurement, then a `STOP` block or two for you to answer, then the gate in report
+   mode, then the refactoring until `./mvnw verify` is green. Say "the next gate" for Error
+   Prone, SpotBugs, JaCoCo and ArchUnit in turn.
+
+3. **Try the measurement by hand first, if you prefer.** Clone the kit anywhere and point it at
+   your project; it changes nothing:
+
+   ```
+   git clone https://github.com/markpollack/java-guardrails
+   cd java-guardrails
+   ./jbang assess  /path/to/your/project
+   ./jbang measure /path/to/your/project
+   ```
+
+What the agent does, step by step, is below; what lands in your repository is a ruleset you
+own, a decisions file, a few lines in your pom, and the refactoring commits.
+
 ## What happens when you use it
 
 You install the kit as a skill in your coding agent, open a Maven project, and ask for quality
@@ -160,6 +198,27 @@ scripts/         the deterministic parts as Java, run through the JBang wrapper
 evidence/        what each gate found on each code base; the source of the thresholds
 .claude-plugin/  Claude Code plugin and marketplace manifests pointing at this directory
 ```
+
+## Roadmap
+
+Proven, on two code bases (the ACP Java SDK, where the settings were calibrated, and the MCP
+Java SDK, where they were confirmed unchanged): the five gates in the status table, each with
+a measure script, a playbook, a plant that turns the build red, and evidence.
+
+Next, in order:
+
+- **A third code base, an application**: Spring Petclinic, in a fresh session that has only
+  this skill, to show the gates and the playbooks work without their author in the loop.
+- **One `guardrails` command** with the verbs as subcommands, `--help` and `--version`, so
+  the JBang catalog form (`jbang guardrails@markpollack/java-guardrails`) is the human CLI.
+- **Gradle**: the measures already work on Gradle projects; the gate install does not.
+- **ArchUnit, the rest**: breaking cycles that run through public types, and a layering rule
+  the owner confirms.
+- **Tier 3**: NullAway, Lincheck, PIT, from the first code base's record.
+- **Windows** proof of the scripts, and a self-test fixture so CI runs the measures and the
+  plants against known counts.
+
+Issues and discussion: <https://github.com/markpollack/java-guardrails/issues>.
 
 ## Licence
 
