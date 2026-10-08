@@ -270,8 +270,10 @@ public class PmdMeasure {
 			String where = where(e);
 			String module = module(e);
 			// ExcessiveParameterList counts every parameter list, abstract or not, except a private
-			// constructor's (PMD) and a record's canonical constructor (the ruleset's exemption)
-			if (!(e instanceof ASTConstructorDeclaration c && (c.getVisibility() == Visibility.V_PRIVATE || isCanonicalRecordConstructor(c)))) {
+			// constructor's (PMD) and, by the ruleset's exemption, a record's constructors and
+			// @JsonCreator factories
+			boolean privateConstructor = e instanceof ASTConstructorDeclaration c && c.getVisibility() == Visibility.V_PRIVATE;
+			if (!privateConstructor && !isRecordContract(e)) {
 				METHOD_PARAMS.add(new Item(name, where, module, e.getArity()));
 			}
 			if (e.getBody() == null) {
@@ -282,17 +284,24 @@ public class PmdMeasure {
 			METHOD_NCSS.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.NCSS, e)));
 		}
 
-		private static boolean isCanonicalRecordConstructor(ASTConstructorDeclaration c) {
-			ASTTypeDeclaration owner = c.getEnclosingType();
-			return owner != null && owner.isRecord() && owner.getRecordComponents() != null
-					&& c.getArity() == owner.getRecordComponents().size();
+		/** A record's constructor, or a method in a record annotated @JsonCreator: restates the components. */
+		private static boolean isRecordContract(ASTExecutableDeclaration e) {
+			ASTTypeDeclaration owner = e.getEnclosingType();
+			if (owner == null || !owner.isRecord()) {
+				return false;
+			}
+			if (e instanceof ASTConstructorDeclaration) {
+				return true;
+			}
+			return e.getDeclaredAnnotations().any(a -> "JsonCreator".equals(a.getSimpleName()));
 		}
 
 		private void type(ASTTypeDeclaration t) {
 			String name = t.getBinaryName();
 			String where = where(t);
 			String module = module(t);
-			if (JavaMetrics.NCSS.supports(t)) {
+			if (JavaMetrics.NCSS.supports(t) && !t.isInterface()) {
+				// interfaces are exempt from class NCSS in the ruleset: their size is API surface
 				int ncss = MetricsUtil.computeMetric(JavaMetrics.NCSS, t);
 				CLASS_NCSS.add(new Item(name, where, module, ncss));
 				if (ncss >= CLASS_NCSS_REFERENCE && !isWireRecordContainer(t)) {
@@ -312,9 +321,9 @@ public class PmdMeasure {
 		}
 
 		/**
-		 * The shapes that fail class NCSS without being tangled code: a type whose statements are
-		 * mostly nested records (a schema), or an interface whose size is nested builder classes
-		 * (an API surface). Anything else is a class to split and gets no case.
+		 * The shapes that fail class NCSS without being tangled code and are not already exempt by
+		 * the ruleset: a type whose statements are mostly nested records (a schema) that misses
+		 * the wire-record-container shape. Anything else is a class to split and gets no case.
 		 */
 		private static ClassSizeCase classSizeCase(ASTTypeDeclaration t, int ncss) {
 			List<ASTTypeDeclaration> nested = t.getDeclarations(ASTTypeDeclaration.class).toList();
@@ -326,13 +335,8 @@ public class PmdMeasure {
 					ncss, records, classes, ownMethods, instanceFields);
 			if (t.isRegularClass() && records >= 10 && records > classes && instanceFields == 0) {
 				return new ClassSizeCase(t.getSimpleName(), t.getBinaryName(), ncss,
-						"wire schema: " + facts + "; misses the wire-record-container exemption only through its nested classes",
-						"exempt (its size is the protocol's) or move the nested classes to their own files so the existing exemption matches");
-			}
-			if (t.isInterface() && classes >= 2) {
-				return new ClassSizeCase(t.getSimpleName(), t.getBinaryName(), ncss,
-						"interface carrying builders: " + facts,
-						"refactor: move the nested classes to their own files; the interface then measures its own methods");
+						"wire schema: " + facts + "; misses the wire-record-container exemption (nested classes with logic, or not final)",
+						"exempt (its size is the protocol's; widen the shape in the ruleset with the reason) or refactor so the shape matches");
 			}
 			return null;
 		}
@@ -346,15 +350,22 @@ public class PmdMeasure {
 			LAMBDA_STATEMENTS.add(new Item(name, where(l), module(l), count));
 		}
 
-		/** The ruleset's violationSuppressXPath for class NCSS, as a predicate. */
+		/**
+		 * The ruleset's wire-record-container exemption for class NCSS, as a predicate: a final
+		 * class with no instance fields whose nested types are records, interfaces, enums, and
+		 * classes holding nothing but static fields (and a private constructor).
+		 */
 		private static boolean isWireRecordContainer(ASTTypeDeclaration t) {
 			if (!t.isRegularClass() || !t.isFinal()) {
 				return false;
 			}
 			boolean hasRecord = t.getDeclarations(ASTTypeDeclaration.class).any(ASTTypeDeclaration::isRecord);
-			boolean hasPlainNestedClass = t.getDeclarations(ASTTypeDeclaration.class).any(ASTTypeDeclaration::isRegularClass);
 			boolean hasInstanceField = t.getDeclarations(ASTFieldDeclaration.class).any(f -> !f.isStatic());
-			return hasRecord && !hasPlainNestedClass && !hasInstanceField;
+			boolean hasNestedClassWithLogic = t.getDeclarations(ASTTypeDeclaration.class).toStream()
+					.filter(ASTTypeDeclaration::isRegularClass)
+					.anyMatch(n -> n.getDeclarations().toStream().anyMatch(d -> !(d instanceof ASTFieldDeclaration f && f.isStatic())
+							&& !(d instanceof ASTConstructorDeclaration c && c.getVisibility() == Visibility.V_PRIVATE)));
+			return hasRecord && !hasInstanceField && !hasNestedClassWithLogic;
 		}
 
 		private static String owner(Node n) {

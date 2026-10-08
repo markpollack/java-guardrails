@@ -59,17 +59,23 @@
       lines, 220 to 250 statements of handler interfaces and builder setters) is measured by
       its code, not its documentation.
 
-      Exemption, class level only: a wire record container, which is a final class with no
-      instance fields and no nested classes, whose nested types are records, interfaces and
-      enums (AcpSchema: one record per protocol message). Its size is the protocol's size,
-      not code to be followed; its methods are still measured like any other.
+      Exemptions, class level only, each a shape rather than a name:
+      - A wire record container: a final class with no instance fields whose nested types are
+        records, interfaces, enums, and classes holding nothing but static fields (constants).
+        Its size is the protocol's size, not code to be followed; its methods are still
+        measured like any other. AcpSchema and McpSchema (2026-10-08, which carries a nested
+        ErrorCodes constants class) are the cases.
+      - An interface: its own logic is default methods, which the method rules measure; its
+        size is API surface, including nested builder types that are public API and cannot
+        move without breaking callers (McpServer and its four specification builders,
+        2026-10-08). Each nested class is still measured on its own.
     -->
     <rule ref="category/java/design.xml/NcssCount">
         <properties>
             <property name="methodReportLevel" value="30"/>
             <property name="classReportLevel" value="300"/>
             <property name="violationSuppressXPath"
-                      value="self::ClassDeclaration[pmd-java:modifiers() = 'final'][ClassBody/RecordDeclaration][not(ClassBody/ClassDeclaration[not(@Interface = true())])][not(ClassBody/FieldDeclaration[not(pmd-java:modifiers() = 'static')])]"/>
+                      value="self::ClassDeclaration[@Interface = true()] | self::ClassDeclaration[pmd-java:modifiers() = 'final'][ClassBody/RecordDeclaration][not(ClassBody/FieldDeclaration[not(pmd-java:modifiers() = 'static')])][not(ClassBody/ClassDeclaration[not(@Interface = true())][ClassBody/*[not(self::FieldDeclaration[pmd-java:modifiers() = 'static']) and not(self::ConstructorDeclaration[pmd-java:modifiers() = 'private'])]])]"/>
         </properties>
     </rule>
 
@@ -110,14 +116,16 @@
         <properties>
             <property name="minimum" value="7"/>
             <!--
-              Exemption: a record's canonical constructor. A record's components are its
-              contract, and the canonical constructor restates them; a protocol schema with
-              nine-component messages is not a long parameter list to fix. Secondary record
-              constructors, class constructors and methods stay measured. Decided on the MCP
-              Java SDK (2026-10-08), where six schema and three feature records failed only here.
+              Exemption: a record's constructors and its @JsonCreator factories. A record's
+              components are its contract; every constructor and the deserialization factory
+              restate them, so a protocol schema with nine-component messages is not a long
+              parameter list to fix. Class constructors and ordinary methods stay measured.
+              Decided on the MCP Java SDK (2026-10-08): six feature-record canonical
+              constructors, four schema convenience constructors and two fromJson factories
+              failed only here.
             -->
             <property name="violationSuppressXPath"
-                      value="./ancestor::ConstructorDeclaration[1][parent::RecordBody][count(FormalParameters/FormalParameter) = count(ancestor::RecordDeclaration[1]/RecordComponentList/RecordComponent)]"/>
+                      value="./ancestor::ConstructorDeclaration[1][parent::RecordBody] | ./ancestor::MethodDeclaration[1][parent::RecordBody][ModifierList/Annotation[@SimpleName = 'JsonCreator']]"/>
         </properties>
     </rule>
 
