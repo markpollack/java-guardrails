@@ -208,7 +208,46 @@ the gate red and the output named `DeadException` on the planted file; restored.
 gate stayed at 0. Owner decision `ERRORPRONE_DISABLED` recorded as the script's recommendation,
 owner to confirm.
 
+## SpotBugs, 2026-10-08, same day
+
+The kit's gate installed: one analysis at `verify`, effort Max, threshold Medium, reporting
+to rank 20, the include filter keeping rank 9 or less plus the 32 concurrency patterns at any
+rank; test-support modules skip by decision; the `mcp` module, a `module-info.java` alone,
+skips because SpotBugs has nothing to open there. The exclude file starts empty. 18 seconds
+per analysis over the reactor.
+
+| | Count |
+|---|---|
+| Findings at any rank, gated modules | 289 |
+| Of those, `EI_EXPOSE_REP` and `EI_EXPOSE_REP2` (rank 18, records handing out what they hold) | 269 |
+| **At the gate** | **6**, all in `mcp-core` |
+| After the fix | **0**; the exclude file is still empty |
+
+The six were real, in two classes. `McpJsonDefaults` synchronised its two static accessors
+on the class object, a public lock any caller can hold against it
+(`USO_UNSAFE_STATIC_METHOD_SYNCHRONIZATION`, rank 7, twice), and re-read a static field after
+an opaque constructor call that SpotBugs cannot see assigning it (`NP_NULL_ON_SOME_PATH`,
+rank 6, twice): now a private lock and a local. `McpServiceLoader` wrote `supplier` and
+`supplierResult` without the lock that `getDefault` reads them under
+(`IS2_INCONSISTENT_SYNC`, rank 17, twice): now synchronized setters. The two `IS2` findings
+are exactly the shape the concurrency list exists for; the rank gate alone would have let
+them through.
+
+**Findings for the kit:**
+1. **The `IS2_INCONSISTENT_SYNC` plant is not reliable.** Planted alone in a utility class it
+   does not fire; beside other synchronized code it does. `falsify spotbugs` now plants a
+   null dereference of a local (`NP_ALWAYS_NULL`, rank 5, dataflow, not an Error Prone check).
+2. **A module with only `module-info.java` fails the analysis** ("No files to analyze could be
+   opened"): `spotbugs.skip` in that module's pom; `measure-spotbugs` says so when the run fails.
+3. **The include filter as a property** lets `measure` swap in an include-everything filter
+   and report the long tail without touching the gate.
+4. **The kit's exclude file carried acp-java's two entries**; it is now an empty template.
+
+Falsified on the finished branch: the planted null dereference turned `spotbugs:check` red and
+the report named `NP_ALWAYS_NULL` on the planted method; restored. `./mvnw -P errorprone
+verify` on JDK 21 runs all three gates (PMD and CPD, Error Prone, SpotBugs).
+
 ## Not yet done
 
-SpotBugs, ArchUnit and JaCoCo have not been measured here. The trial branch `guardrails-pmd` in
-the local clone is not pushed and nothing is proposed upstream.
+ArchUnit and JaCoCo have not been measured here. The trial branch `guardrails-pmd` in the
+local clone is not pushed and nothing is proposed upstream.

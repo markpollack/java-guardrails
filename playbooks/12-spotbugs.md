@@ -1,6 +1,6 @@
 # SpotBugs: rank 9 or less, plus concurrency at any rank
 
-> Status: measured and installed on the MCP Java SDK (2026-10-08) after acp-java; going green.
+> Status: proven end to end on the MCP Java SDK (2026-10-08, `evidence/mcp-java-sdk.md`: measured, installed, six real findings fixed, falsified) after acp-java.
 > Each step is a **script**, an **AI** task, or a **stop** for the owner. Maven only. Runs on
 > every JDK the build uses; no profile.
 
