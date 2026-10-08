@@ -70,7 +70,7 @@ zero in 27 commits, with the worst method going from cognitive complexity 59 to 
 
 ## Install
 
-Prerequisites: a JDK 17 or newer and a Maven project with the Maven wrapper (`mvnw`). The kit's
+Prerequisites: a JDK 17 or newer (21 or newer for the Error Prone gate and its measure) and a Maven project with the Maven wrapper (`mvnw`). The kit's
 scripts are Java, run through a bundled JBang wrapper that resolves its own dependencies on
 first run. Nothing else is needed, not JBang, not Node, not Python.
 

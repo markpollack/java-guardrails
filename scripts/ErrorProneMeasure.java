@@ -1,5 +1,5 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
-//JAVA 17+
+//JAVA 21+
 //DEPS com.google.errorprone:error_prone_core:2.50.0
 //SOURCES Util.java
 
