@@ -122,10 +122,15 @@ public class JacocoMeasure {
 		System.out.println("## Stops");
 		System.out.println();
 		if (!decisions.has("JACOCO_FLOORS")) {
-			System.out.println("Relay the block below to the owner as written, record the answer in `" + target.relativize(decisions.file) + "`, then run measure-jacoco again.");
+			// the floors are the kit's default from unambiguous data: a notification, unless a module measured nothing at all
+			boolean decide = coverages.isEmpty() || coverages.stream().anyMatch(c -> c.lineTotal() > 0 && c.lineCovered() == 0);
+			System.out.println(decide
+					? "A module measured no coverage at all, so the floors are a decision: relay the block below to the owner as written, record the answer in `" + target.relativize(decisions.file) + "`, then run measure-jacoco again."
+					: "Record the line below in `" + target.relativize(decisions.file) + "`, show the block to the owner, and continue: a notification, not a decision.");
 			System.out.println();
 			System.out.println("```");
-			System.out.println("STOP JACOCO_FLOORS");
+			System.out.println(Util.stopHeader("JACOCO_FLOORS", decide));
+			System.out.print(Util.kindLine(decide));
 			System.out.println("  The floors below are measured minus " + MARGIN + " points, rounded down: enough for run-to-run variation of concurrent tests, too little to lose a test class unnoticed. Raise a floor when coverage rises; lower one only with a reason in the commit.");
 			for (Coverage c : coverages) {
 				System.out.printf(Locale.ROOT, "    %s: measured %.1f / %.1f, floor %d / %d (line / branch)%n", c.module(), 100 * c.line(), 100 * c.branch(), floor(c.line()), floor(c.branch()));

@@ -174,7 +174,9 @@ public class ErrorProneMeasure {
 			System.out.println();
 			return;
 		}
-		StringBuilder b = new StringBuilder("STOP ERRORPRONE_DISABLED\n");
+		// style-tagged checks over the fix limit are the kit's default to disable: a notification; an untagged check needs the owner
+		boolean decide = styleCandidates.stream().anyMatch(check -> catalog.get(check) == null || catalog.get(check).tags().isEmpty());
+		StringBuilder b = new StringBuilder(Util.stopHeader("ERRORPRONE_DISABLED", decide)).append("\n").append(Util.kindLine(decide));
 		b.append("  These checks have findings and Error Prone does not mark them as bugs (style-tagged, or untagged WARNINGs); each is either fixed in the code or disabled by name in the profile with a reason:\n");
 		List<String> recommendDisable = new ArrayList<>();
 		for (String check : styleCandidates) {
@@ -190,7 +192,9 @@ public class ErrorProneMeasure {
 		}
 		b.append("  Options per check: fix  |  disable (a -Xep:<Check>:OFF in the profile and a line in configs/errorprone/disabled-checks.txt with the reason)\n");
 		b.append("  Record as:  ERRORPRONE_DISABLED: ").append(recommendDisable.isEmpty() ? "none" : String.join(", ", recommendDisable)).append("\n");
-		System.out.println("Relay the block below to the owner as written, record the answer in `" + target.relativize(decisions.file) + "`, then run measure-errorprone again.");
+		System.out.println(decide
+				? "An untagged check is among them, so this is a decision: relay the block below to the owner as written, record the answer in `" + target.relativize(decisions.file) + "`, then run measure-errorprone again."
+				: "Every check below is style-tagged, so this is a notification: record the line in `" + target.relativize(decisions.file) + "`, show the block to the owner, and run measure-errorprone again.");
 		System.out.println();
 		System.out.println("```");
 		System.out.print(b);

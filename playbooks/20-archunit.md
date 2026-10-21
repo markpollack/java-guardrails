@@ -2,6 +2,7 @@
 
 > Status: no-cycles proven on the MCP Java SDK (2026-10-08, `evidence/mcp-java-sdk.md`: measured, decided, installed on the cycle-free modules, falsified) after acp-java. Layers not yet.
 > Each step is a **script**, an **AI** task, or a **stop** for the owner. Maven, JUnit 5.
+> Evidence for this gate records which `assess` signal (module count, churn) predicted each cycle found, or that none did.
 
 The gate: a `NoCyclesTest` in each gated module's test sources, from
 `configs/archunit/NoCyclesTest.java.tmpl`, with two rules over the module's main classes: no

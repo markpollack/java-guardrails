@@ -52,7 +52,7 @@ profile with a reason in `configs/errorprone/disabled-checks.txt`; a real except
    NOT PROVEN, not failure, when javac's own warnings stopped Error Prone from running.
 7. **AI** — flip to fail is already the profile's shape (`errorprone.failOnWarning` true);
    `./mvnw -P errorprone verify` on JDK 21 is the target. Commit with the measurement; append
-   the code base to `evidence/`.
+   the code base to `evidence/`, with the `assess` signal that predicted each real bug, or that none did.
 
 ## Known shapes
 

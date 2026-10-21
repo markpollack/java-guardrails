@@ -66,7 +66,7 @@ final class Util {
 	/** Test libraries whose presence without {@code <scope>test</scope>} marks a module as test support. */
 	static final Pattern TEST_LIBRARY = Pattern.compile(
 			"<artifactId>(junit[a-z0-9-]*|assertj[a-z0-9-]*|mockito[a-z0-9-]*|testcontainers[a-z0-9-]*|hamcrest[a-z0-9-]*|testng|spring-boot-starter-test|spring-test)</artifactId>");
-	static final Pattern TEST_MODULE_NAME = Pattern.compile("(^|[-_/])(test|tests|testing|test-support|testkit|conformance)([-_/]|$)");
+	static final Pattern TEST_MODULE_NAME = Pattern.compile("(^|[-_/])(test|tests|testing|test-support|testkit|tck|conformance)([-_/]|$)");
 
 	/**
 	 * Every module below the target that has a src/main/java, with the reasons it looks like test
@@ -181,6 +181,16 @@ final class Util {
 			return values;
 		}
 
+		/** {@code GATE_ORDER: jacoco, spotbugs, errorprone, pmd, archunit; pit scoped-only}: the gate keys before the semicolon. */
+		List<String> gateOrder() {
+			String v = get("GATE_ORDER");
+			if (v.isEmpty()) {
+				return List.of();
+			}
+			String gates = v.contains(";") ? v.substring(0, v.indexOf(';')) : v;
+			return Stream.of(gates.split(",")).map(String::trim).map(x -> x.toLowerCase(java.util.Locale.ROOT)).filter(x -> !x.isEmpty()).collect(Collectors.toList());
+		}
+
 		List<String> excludedModules() {
 			String v = get("TEST_SUPPORT_MODULES");
 			if (!v.startsWith("exclude")) {
@@ -220,6 +230,41 @@ final class Util {
 				values.forEach((k, v) -> System.out.println("  " + k + ": " + v));
 			}
 			System.out.println();
+		}
+	}
+
+	// ---- Stop blocks ------------------------------------------------------------------------------
+
+	/**
+	 * The first line of a STOP block: {@code STOP <ID> (notify)} when the recommendation is the
+	 * kit's mechanical default and the data is unambiguous, so the agent records the line and
+	 * continues; {@code STOP <ID> (decide)} when the options lead to materially different
+	 * outcomes, so the agent relays the block and waits for the owner.
+	 */
+	static String stopHeader(String id, boolean decide) {
+		return "STOP " + id + " (" + (decide ? "decide" : "notify") + ")";
+	}
+
+	/** The second line of a STOP block, saying what the kind means for the agent reading it. */
+	static String kindLine(boolean decide) {
+		return decide ? "  Kind: decide. Relay this block as written and do not proceed until the owner answers.\n"
+				: "  Kind: notify. The recommendation is the kit's default; record the line, show the block, continue.\n";
+	}
+
+	/** The output lines of a git command run in the target, or none when git or the history is unavailable. */
+	static List<String> git(Path target, String... args) {
+		List<String> command = new ArrayList<>(List.of("git", "-C", target.toString()));
+		command.addAll(List.of(args));
+		try {
+			Process p = new ProcessBuilder(command).redirectErrorStream(false).start();
+			List<String> lines;
+			try (Stream<String> s = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8)).lines()) {
+				lines = s.collect(Collectors.toList());
+			}
+			return p.waitFor() == 0 ? lines : List.of();
+		}
+		catch (IOException | InterruptedException e) {
+			return List.of();
 		}
 	}
 

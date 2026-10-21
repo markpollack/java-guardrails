@@ -13,14 +13,18 @@ threshold will do.
 
 ## Status
 
-| Gate | Tier | Status |
-|---|---|---|
-| PMD size, complexity and duplication | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. `evidence/mcp-java-sdk.md` has the numbers. |
-| Error Prone | 1 | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
-| SpotBugs | 1 | **Proven end to end on two code bases**: six real findings on the second, all concurrency or locking. |
-| JaCoCo floors | 2 | **Proven end to end on two code bases**; the measure detects the surefire argLine trap. |
-| ArchUnit no-cycles | 2 | **Proven on two code bases**; on the second, gating the cycle-free modules while the core's 13 measured cycles wait for their own session. Layers not yet. |
-| NullAway, Lincheck, PIT | 3 | Outlines. |
+Each gate answers one question about the code; the order to install them comes from the code
+base's own signals, which `assess` reads (below), not from the table.
+
+| Question | Gate | Cost, cadence | Status |
+|---|---|---|---|
+| Is the code executed by its own tests? | JaCoCo floors | seconds after the tests; every commit | **Proven end to end on two code bases**, measured with floors recorded on a third; the measure detects the surefire argLine trap; the floors are a notification, not a question. |
+| Is executed code wrong in a known shape? | SpotBugs rank 9 plus concurrency | minutes; every change | **Proven end to end on three code bases**: six real findings on the second and four on the third, all concurrency or locking. |
+| Is executed code wrong in a known shape? | Error Prone defaults at ERROR | a compile under JDK 21; every change | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
+| Does the executing test check anything? | PIT, scoped | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | Playbook written from one code base's record; a profile, never a gate. |
+| What must be refactored before the others can see it? | PMD size, complexity and duplication | minutes, then the refactoring; a target, then a gate | **Proven end to end on two code bases**: measured, decided, installed, green, falsified; measured on a third, where the references did not fit (`evidence/agent-journal.md`). |
+| Is the structure drifting? | ArchUnit no-cycles | seconds after compile; every change | **Proven on two code bases**; on the second, gating the cycle-free modules while the core's 13 measured cycles wait for their own session. Layers not yet. |
+| | NullAway, Lincheck | | Outlines. |
 
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
 install does not.
@@ -38,17 +42,20 @@ Maven wrapper, and a coding agent that reads Agent Skills (Claude Code, or any o
    /plugin install java-guardrails@java-guardrails
    ```
 
-   Any other agent, with Node present: `npx skills add markpollack/java-guardrails`.
-   By hand: `git clone https://github.com/markpollack/java-guardrails .claude/skills/java-guardrails`.
+   If the first command answers that the marketplace is already on disk, it was added before;
+   go on to the second. Any other agent, with Node present:
+   `npx skills add markpollack/java-guardrails`. By hand:
+   `git clone https://github.com/markpollack/java-guardrails .claude/skills/java-guardrails`.
 
-2. **Open your project in the agent and ask for the first gate:**
+2. **Open your project in the agent and ask for quality gates:**
 
-   > install the PMD quality gate on this project
+   > install quality gates on this project
 
-   The agent reads `playbooks/10-pmd.md` and runs the kit's scripts. The first run takes a few
-   minutes: measurement, then a `STOP` block or two for you to answer, then the gate in report
-   mode, then the refactoring until `./mvnw verify` is green. Say "the next gate" for Error
-   Prone, SpotBugs, JaCoCo and ArchUnit in turn.
+   The agent runs `assess`, which reads your code base's signals and prints the gate order it
+   recommends with a reason per gate, records it, and names the first gate. Then it follows that
+   gate's playbook: measurement, a `STOP` block or two (a notification it records and goes on
+   from, or a decision it waits for), the gate in report mode, the refactoring until
+   `./mvnw verify` is green. Say "the next gate" for each one after.
 
 3. **Try the measurement by hand first, if you prefer.** Clone the kit anywhere and point it at
    your project; it changes nothing:
@@ -66,18 +73,25 @@ own, a decisions file, a few lines in your pom, and the refactoring commits.
 ## What happens when you use it
 
 You install the kit as a skill in your coding agent, open a Maven project, and ask for quality
-gates. The agent then follows `playbooks/10-pmd.md`:
+gates. The agent then follows `playbooks/00-assess.md` and the playbook of the gate it names:
 
 1. **Assess.** A script inventories the project: modules, test-support modules, Java level,
-   tooling already in the build. Nothing is run.
+   tooling already in the build; then the signals (tests, a PIT profile without coverage
+   floors, concurrency primitives in main sources, size, churn) and the gate order they
+   recommend, one reason per gate. No build is run. The order is recorded as `GATE_ORDER` and
+   every later run names the next gate from it.
 2. **Measure.** A script computes every metric the gate will enforce for every method, class
    and lambda, and prints the distribution, the worst cases by name, and the cost at the
    kit's threshold: how many fail, and whether the threshold fits this code base.
-3. **You decide.** The script ends with one `STOP` block per decision only you can make, with
-   the data, the options and a recommendation. The agent relays it as written and waits:
+3. **You decide, when there is a decision.** The script ends with one `STOP` block per
+   answer it needs, with the data, the options, a recommendation and the line to record. A
+   block marked `notify` is the kit's own default from unambiguous data (coverage floors at
+   measured minus 2, the gate order): the agent records it, shows it to you, and goes on. A
+   block marked `decide` is relayed as written, and the agent waits:
 
    ```
-   STOP PMD_MECHANISM
+   STOP PMD_MECHANISM (decide)
+     Kind: decide. Relay this block as written and do not proceed until the owner answers.
      Cost of going green in the measured modules: 57 PMD violations and 33 CPD blocks.
        mcp-core: 57 PMD
      Options: (a) fix-all: every violation fixed in the code, one hotspot per commit
@@ -173,6 +187,12 @@ name the script: `<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`. On Window
 
 ## The ideas behind it
 
+- **The code base chooses the order.** A gate is installed when the code base's own signals
+  say it is the next question worth answering: coverage first when a mutation run has been
+  scoring never-executed code, SpotBugs early when the new code is a reader thread with a
+  lock. The tier table says how proven a gate is, not when to install it.
+- **A stop whose answer is the computed default is a notification, not a decision.** Floors at
+  measured minus 2 with nothing in the data against them are recorded and shown, not asked.
 - **Thresholds are constants, not knees.** Calibrated once, confirmed on each code base by a
   fit check (at most 5% of the population fails, and what fails is the worst code). A gap
   search for a "natural" threshold was tried and removed: on heavy-tailed metrics it always
@@ -186,6 +206,9 @@ name the script: `<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`. On Window
   nothing else. Each is an XPath in your ruleset with the reason beside it.
 - **The measurement equals the gate.** `measure`'s counts are checked against the real plugin's
   report rule by rule. A measurement not checked against the gate is an opinion.
+- **Evidence says which signal predicted the finding.** Each code base's evidence file records,
+  for every real finding a gate made, the `assess` signal that pointed at it, or that none did;
+  that is how the signals earn their place in the order.
 
 ## Layout
 
@@ -203,7 +226,10 @@ evidence/        what each gate found on each code base; the source of the thres
 
 Proven, on two code bases (the ACP Java SDK, where the settings were calibrated, and the MCP
 Java SDK, where they were confirmed unchanged): the five gates in the status table, each with
-a measure script, a playbook, a plant that turns the build red, and evidence.
+a measure script, a playbook, a plant that turns the build red, and evidence. A third,
+agent-journal, applied the kit through its own README without the author in the loop
+(JaCoCo and SpotBugs installed; PMD measured, and the first code base where the references did
+not fit), and its feedback became the gate order from signals and the notify/decide stops.
 
 Next, in order:
 
@@ -214,7 +240,8 @@ Next, in order:
 - **Gradle**: the measures already work on Gradle projects; the gate install does not.
 - **ArchUnit, the rest**: breaking cycles that run through public types, and a layering rule
   the owner confirms.
-- **Tier 3**: NullAway, Lincheck, PIT, from the first code base's record.
+- **Tier 3**: NullAway and Lincheck from the first code base's record; PIT's scoped playbook
+  is written, a script to run it is not.
 - **Windows** proof of the scripts, and a self-test fixture so CI runs the measures and the
   plants against known counts.
 

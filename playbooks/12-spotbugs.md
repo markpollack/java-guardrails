@@ -35,12 +35,18 @@ was never written.
    whole pattern or package. The long tail (exposed representations in records, inner classes
    that could be static, constructors that throw) stays out by design; a pattern joins the
    gate only through the include filter with a written reason.
-5. **Script** — `./jbang falsify <target> spotbugs`: plants a counter written under the monitor
-   and read without it (`IS2_INCONSISTENT_SYNC`, rank 17, kept by the concurrency list and
-   invisible to Error Prone), runs the module's `spotbugs:check` with the errorprone profile
-   off, and passes only if the build went red and the report names the planted method.
+5. **Script** — `./jbang falsify <target> spotbugs`: plants a method that dereferences a
+   local known to be null (`NP_ALWAYS_NULL`, rank 1 to 3, so it is reported whatever the include
+   list holds), runs the module's `spotbugs:check` with the errorprone profile off, and passes
+   only if the build went red and the report names the planted method. This proves the gate is
+   live, not that the concurrency include list is: SpotBugs reports `IS2_INCONSISTENT_SYNC`
+   only when the field is also accessed under a lock elsewhere in the class, so a planted
+   inconsistent-sync counter is reported in some classes and not others, and the kit stopped
+   planting it on 2026-10-08. The include list is proven by reading
+   `config/spotbugs/spotbugs-include.xml` against the measure's "every rank" run.
 6. **AI** — `./mvnw verify` green; commit with the counts at the gate and below it; append the
-   code base to `evidence/`.
+   code base to `evidence/`, with the `assess` signal that predicted each finding (on
+   agent-journal and the MCP SDK: the concurrency signal), or that none did.
 
 ## Known shapes
 
@@ -49,6 +55,9 @@ was never written.
   when the field is read again outside, `NP_NULL_ON_SOME_PATH` (rank 6). The fix is a private
   lock object or a holder class, not an exclusion.
 - **`IS2_INCONSISTENT_SYNC` at rank 17** is the pattern the rank gate alone misses and the one
-  a transport library most needs; it is in the include list for that reason.
+  a transport library most needs; it is in the include list for that reason. It is not the
+  plant (step 5): the detector needs the field read under a lock elsewhere in the same class
+  before it reports the unlocked access, so a planted counter fires only beside existing
+  synchronized code.
 - **The long tail is almost all `EI_EXPOSE_REP*`** (rank 18): records returning the lists and
   maps they hold. 263 of 283 on the SDK core. Advice, not gated.

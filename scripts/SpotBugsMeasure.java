@@ -117,7 +117,8 @@ public class SpotBugsMeasure {
 		System.out.println();
 		if (atGate.size() > FIX_LIMIT && !decisions.has("SPOTBUGS_MECHANISM")) {
 			System.out.println("```");
-			System.out.println("STOP SPOTBUGS_MECHANISM");
+			System.out.println(Util.stopHeader("SPOTBUGS_MECHANISM", true));
+			System.out.print(Util.kindLine(true));
 			System.out.println("  " + atGate.size() + " findings at the gate, more than " + FIX_LIMIT + ".");
 			System.out.println("  Options: (a) fix-all now   (b) ratchet: spotbugs.maxAllowedViolations at today's count, lowered as fixes land");
 			System.out.println("  Recommendation: (b)");

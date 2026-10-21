@@ -503,7 +503,7 @@ public class PmdMeasure {
 
 		List<Util.Module> testSupport = all.stream().filter(m -> !m.testSupportReasons().isEmpty()).collect(Collectors.toList());
 		if (!testSupport.isEmpty() && !d.has("TEST_SUPPORT_MODULES")) {
-			StringBuilder b = new StringBuilder("STOP TEST_SUPPORT_MODULES\n");
+			StringBuilder b = new StringBuilder(Util.stopHeader("TEST_SUPPORT_MODULES", true)).append("\n").append(Util.kindLine(true));
 			b.append("  These modules keep test code in src/main/java, so the gate would make the agent refactor tests:\n");
 			for (Util.Module m : testSupport) {
 				long pmd = metrics.stream().flatMap(x -> x.items().stream().filter(i -> i.module().equals(m.path()) && i.value() >= x.reference())).count();
@@ -526,7 +526,7 @@ public class PmdMeasure {
 			}
 			long total = perModule.values().stream().mapToLong(Long::longValue).sum();
 			long cpd = cpdBlocks.stream().filter(i -> i.value() >= 100).count();
-			StringBuilder b = new StringBuilder("STOP PMD_MECHANISM\n");
+			StringBuilder b = new StringBuilder(Util.stopHeader("PMD_MECHANISM", true)).append("\n").append(Util.kindLine(true));
 			b.append("  Cost of going green in the measured modules: ").append(total).append(" PMD violations and ").append(cpd).append(" CPD blocks");
 			if (!testSupport.isEmpty() && !d.has("TEST_SUPPORT_MODULES")) {
 				b.append(" (counts change if TEST_SUPPORT_MODULES excludes modules; answer that first)");
@@ -537,9 +537,13 @@ public class PmdMeasure {
 			b.append("           (b) ratchet: maxAllowedViolations at today's count per module, lowered as fixes land\n");
 			b.append("           (c) scope: gate the listed modules first, the rest later\n");
 			b.append("  Recommendation: ").append(total <= FIX_ALL_LIMIT ? "(a), the count is below " + FIX_ALL_LIMIT : "(b), the count is above " + FIX_ALL_LIMIT).append("\n");
-			b.append("  Record as:  PMD_MECHANISM: fix-all\n");
-			b.append("          or  PMD_MECHANISM: ratchet\n");
-			b.append("          or  PMD_MECHANISM: scope ").append(gated.stream().map(Util.Module::path).collect(Collectors.joining(", "))).append("\n");
+			// the recommended form first, so the line to record follows the recommendation
+			String scope = "PMD_MECHANISM: scope " + gated.stream().map(Util.Module::path).collect(Collectors.joining(", "));
+			List<String> forms = total <= FIX_ALL_LIMIT ? List.of("PMD_MECHANISM: fix-all", "PMD_MECHANISM: ratchet", scope)
+					: List.of("PMD_MECHANISM: ratchet", "PMD_MECHANISM: fix-all", scope);
+			b.append("  Record as:  ").append(forms.get(0)).append("\n");
+			b.append("          or  ").append(forms.get(1)).append("\n");
+			b.append("          or  ").append(forms.get(2)).append("\n");
 			blocks.add(b.toString());
 		}
 
@@ -547,7 +551,7 @@ public class PmdMeasure {
 				.filter(c -> !d.classSizeExempt().contains(c.simpleName()) && !d.classSizeRefactor().contains(c.simpleName()))
 				.collect(Collectors.toList());
 		if (!undecided.isEmpty()) {
-			StringBuilder b = new StringBuilder("STOP CLASS_SIZE\n");
+			StringBuilder b = new StringBuilder(Util.stopHeader("CLASS_SIZE", true)).append("\n").append(Util.kindLine(true));
 			b.append("  These types fail class NCSS (").append(CLASS_NCSS_REFERENCE).append(") for a reason other than tangled code:\n");
 			for (ClassSizeCase c : undecided) {
 				b.append("    ").append(c.binaryName()).append(": ").append(c.shape()).append("\n");
@@ -563,7 +567,7 @@ public class PmdMeasure {
 			if (d.has("THRESHOLD_FIT_" + m.key().toUpperCase(Locale.ROOT).replace('-', '_'))) {
 				continue;
 			}
-			StringBuilder b = new StringBuilder("STOP THRESHOLD_FIT_" + m.key().toUpperCase(Locale.ROOT).replace('-', '_') + "\n");
+			StringBuilder b = new StringBuilder(Util.stopHeader("THRESHOLD_FIT_" + m.key().toUpperCase(Locale.ROOT).replace('-', '_'), true)).append("\n").append(Util.kindLine(true));
 			b.append("  ").append(m.title()).append(": ").append(m.failing()).append(" of ").append(m.items().size())
 					.append(" fail at the reference ").append(m.reference()).append(", more than ").append(FIT_PERCENT).append("%.\n");
 			b.append("  The reference was calibrated on acp-java and confirmed on the MCP Java SDK; here it does not separate the worst code from the rest.\n");
@@ -590,7 +594,7 @@ public class PmdMeasure {
 			System.out.println();
 			return;
 		}
-		System.out.println("Relay each block below to the owner as written, record the answer in `"
+		System.out.println("Every block below is a decision: relay each to the owner as written, record the answer in `"
 				+ target.relativize(Util.Decisions.path(target)) + "`, then run measure again.");
 		System.out.println();
 		System.out.println("```");

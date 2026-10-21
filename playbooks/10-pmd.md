@@ -59,7 +59,8 @@ and any narrow, written exclusion.
    the slice). Commit with the measurement in the body: the counts from step 1, the mechanism,
    and the exclusions.
 7. **AI** — append the code base to `evidence/`: what the gate found, which thresholds were
-   confirmed, what did not fit, and the first-run triage.
+   confirmed, what did not fit, the first-run triage, and which `assess` signal (churn, size,
+   concurrency, tooling) predicted each real finding, or that none did.
 
 ## Known shapes
 

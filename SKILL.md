@@ -5,7 +5,7 @@ license: Business Source License 1.1; see LICENSE
 compatibility: Requires a JDK 17 or newer and a Maven project with the Maven wrapper. The bundled JBang wrapper resolves everything else on first run. Gradle is not yet supported.
 metadata:
   author: markpollack
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # java-guardrails
@@ -33,37 +33,50 @@ JBang reads `jbang-catalog.json` from where it is run. They need only a JDK.
 4. Falsify: plant a violation, see the build go red, restore.
 5. Flip to fail and commit with the measurement in the body.
 
-The gates, in the order to install them, each with its playbook:
+The gates, each with the question it answers and its playbook. **The order to install them
+comes from `assess`**, which reads the code base's own signals and records `GATE_ORDER`
+(`playbooks/00-assess.md`); the tier says how proven a gate is, not when to install it.
 
-| Tier | Gate | Playbook | Status |
-|---|---|---|---|
-| 1 | PMD size, complexity and duplication | `playbooks/10-pmd.md` | proven on two code bases |
-| 1 | Error Prone defaults at ERROR | `playbooks/11-errorprone.md` | proven on two code bases |
-| 1 | SpotBugs rank 9 plus concurrency | `playbooks/12-spotbugs.md` | proven on two code bases |
-| 2 | ArchUnit no-cycles, then layers | `playbooks/20-archunit.md` | no-cycles proven on two code bases; layers not yet |
-| 2 | JaCoCo coverage floors | `playbooks/21-jacoco.md` | proven on two code bases |
-| 3 | NullAway, Lincheck, PIT | `playbooks/3x-*.md` | outline |
+| Gate | Question it answers | Cost, cadence | Playbook | Status |
+|---|---|---|---|---|
+| JaCoCo coverage floors | Is the code executed by its own tests? | seconds; every commit | `playbooks/21-jacoco.md` | proven on two code bases; measured and floors recorded on a third |
+| SpotBugs rank 9 plus concurrency | Is executed code wrong in a known shape? | minutes; every change | `playbooks/12-spotbugs.md` | proven on three code bases |
+| Error Prone defaults at ERROR | Is executed code wrong in a known shape? | a compile under JDK 21; every change | `playbooks/11-errorprone.md` | proven on two code bases |
+| PMD size, complexity and duplication | What must be refactored before the others can see it? | minutes, then the refactoring; a target, then a gate | `playbooks/10-pmd.md` | proven on two code bases; measured on a third |
+| ArchUnit no-cycles, then layers | Is the structure drifting? | seconds; every change | `playbooks/20-archunit.md` | no-cycles proven on two code bases; layers not yet |
+| PIT, scoped | Does the executing test check anything? | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | `playbooks/32-pit.md` | written from one code base's record; not a gate |
+| NullAway, Lincheck | tier 3 | | `playbooks/30-*.md`, `31-*.md` | outline |
 
-Follow a playbook step by step. Every step is marked **script**, **AI** or **stop**. Do not
-write a gate's playbook from memory; an outline means the gate is not yet proven and you say so.
+Follow a playbook step by step. Every step is marked **script**, **AI**, **notify** or **stop**.
+Do not write a gate's playbook from memory; an outline means the gate is not yet proven and you
+say so.
 
-## Stops: how the owner decides
+## Stops: notify or decide
 
-Some steps need a decision only the owner can make: which modules are test code, how to go green,
-which exemptions to write. The scripts detect when such a decision is missing and end their report
-with one `STOP <ID>` block per decision, carrying the data, the options, a recommendation computed
-from the data, and the exact line to record.
+Some steps need the owner: which modules are test code, how to go green, which exemptions to
+write. The scripts detect when such an answer is missing and end their report with one
+`STOP <ID> (<kind>)` block each, carrying the data, the options, a recommendation computed from
+the data, and the exact line to record. The kind is the second line of every block.
 
-- Relay each block to the owner **as written**. Do not paraphrase, merge or summarise blocks, and
-  do not answer them yourself. In Claude Code, one question per block with the block's options is
-  the natural form.
-- Write the owner's answer as the `Record as:` line into `config/guardrails/decisions.md` in the
-  target, creating the file with a `# java-guardrails decisions` heading if absent, and append
-  the date in parentheses.
-- Run the script again. It reads the file, applies the decision, and does not re-ask. A changed
-  decision is an edit to that file.
+- **`notify`**: the recommendation is the kit's mechanical default and the data is unambiguous
+  (`GATE_ORDER`; `JACOCO_FLOORS` at measured minus 2; `ERRORPRONE_DISABLED` when every check is
+  style-tagged). Write the `Record as:` line into the decisions file, show the block to the owner
+  in your reply, and continue. Do not ask.
+- **`decide`**: the options lead to materially different outcomes (`TEST_SUPPORT_MODULES`,
+  `PMD_MECHANISM`, `CLASS_SIZE`, `THRESHOLD_FIT_*`, `SPOTBUGS_MECHANISM`, `ARCHUNIT_CYCLES`).
+  Relay the block to the owner **as written**, as a fenced text block in your reply. Do not
+  paraphrase, merge or summarise blocks, and do not answer them yourself. A question widget with
+  the block's options is optional; the text is the contract. Do not proceed past a `decide` block
+  until it is answered.
+- Either way the answer is the `Record as:` line in `config/guardrails/decisions.md` in the
+  target, created with a `# java-guardrails decisions` heading if absent, the date in
+  parentheses. Run the script again: it reads the file, applies the answer, and does not re-ask.
+  A changed answer is an edit to that file.
 
-Do not proceed past a block until it is answered.
+The decisions file is the kit's memory in the target. Keys the kit reads: `GATE_ORDER`,
+`TEST_SUPPORT_MODULES`, `PMD_MECHANISM`, `CLASS_SIZE`, `THRESHOLD_FIT_<METRIC>`,
+`ERRORPRONE_DISABLED`, `SPOTBUGS_MECHANISM`, `JACOCO_FLOORS`, `ARCHUNIT_CYCLES`. Any other key
+is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's own notes go there.
 
 ## Rules that are not negotiable
 
@@ -82,7 +95,7 @@ Do not proceed past a block until it is answered.
 ## Scripts
 
 ```
-<kit>/jbang <kit>/scripts/Assess.java       <target>      # inventory and the next step; run this first
+<kit>/jbang <kit>/scripts/Assess.java       <target>      # inventory, signals, gate order, the next gate; run this first and after every gate
 <kit>/jbang <kit>/scripts/PmdMeasure.java   <target> [--top N] [--cpd-tokens N] [--exclude module,module]
 <kit>/jbang <kit>/scripts/ErrorProneMeasure.java <target> [--top N]   # needs the errorprone profile installed and JDK 21+
 <kit>/jbang <kit>/scripts/SpotBugsMeasure.java   <target> [--top N]     # needs the plugin slice installed
@@ -91,7 +104,9 @@ Do not proceed past a block until it is answered.
 <kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd | errorprone | spotbugs | jacoco | archunit
 ```
 
-`assess` reads files only and says what is there and what to do next. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
+`assess` reads files and the git log, runs no build, and says what is there, the gate order the
+code base's signals recommend, the next gate from the recorded order, and the scoped PIT command
+when a profile exists. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
 needs no build. `falsify` plants in the first class of the first module, runs that module's check
 goal through the target's `mvnw`, restores the file byte for byte, and passes only if the build
 went red and the module's report names the plant.
@@ -101,6 +116,8 @@ went red and the module's report names the plant.
 - `configs/` the files copied into `<target>/config/`: the PMD ruleset with every threshold's
   reason beside it, SpotBugs filters, Error Prone lists, the ArchUnit template.
 - `maven/` the plugin blocks and properties to paste into the target's root pom.
-- `evidence/` what each gate found on each code base; the source of the tiers and thresholds.
-  Read `evidence/acp-java.md` and `evidence/mcp-java-sdk.md` before claiming a threshold fits.
+- `evidence/` what each gate found on each code base, and which `assess` signal predicted it;
+  the source of the thresholds. Read `evidence/acp-java.md`, `evidence/mcp-java-sdk.md` and
+  `evidence/agent-journal.md` before claiming a threshold fits. When you append to it, say which
+  signal predicted each real finding, or that none did.
 - `README.md` the front door for people.

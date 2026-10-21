@@ -19,8 +19,11 @@ lower one only with a reason in the commit. Nothing is excluded.
    It reads surefire's `<argLine>` first: `@{name}` (late-bound) works and the agent is written
    into that property; `${name}` is interpolated before JaCoCo runs and the agent never attaches,
    which the script reports with the one-token fix. A red test suite is not measured.
-2. **Stop** — `JACOCO_FLOORS`: the floors per module, measured minus 2 as proposed, or the
-   owner's own, never above measured. One line in `config/guardrails/decisions.md`.
+2. **Notify** — `JACOCO_FLOORS`: the floors per module, measured minus 2. The recommendation is
+   the kit's default from unambiguous data, so the block is `notify`: record the line in
+   `config/guardrails/decisions.md`, show it to the owner, continue. It becomes `decide` only
+   when a module measured no coverage at all. The owner may edit the line to their own floors,
+   never above measured.
 3. **AI** — install: `jacoco-maven-plugin.version` 0.8.15 and the default floors 1.00 from
    `maven/properties.xml`, `jacoco.propertyName` set to surefire's argLine property when it is
    not `argLine`, the plugin block from `maven/jacoco.plugin.xml`, and in each gated module's
@@ -33,7 +36,9 @@ lower one only with a reason in the commit. Nothing is excluded.
 5. **AI** — the first run is a bug hunt (acp-java: agents registered by class were created per
    request, found by writing tests to hold a floor). Code reached only from another module's
    tests counts as uncovered in its own module: that is a test to write there, not a floor to
-   lower. Commit with the measured ratios and floors in the body; append to `evidence/`.
+   lower. Commit with the measured ratios and floors in the body; append to `evidence/` with
+   the `assess` signal that predicted the finding (a PIT profile without coverage floors: the
+   mutation run was scoring never-executed code), or that none did.
 
 ## Known shapes
 
