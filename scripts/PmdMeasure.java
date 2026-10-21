@@ -128,16 +128,15 @@ public class PmdMeasure {
 		decisions.print();
 
 		MeasureRule.MODULES = gated;
-		analyse(target, gated, javaVersion);
+		try {
+			analyse(target, gated, javaVersion);
+		}
+		catch (IllegalStateException e) {
+			System.err.println("measure: " + e.getMessage());
+			System.exit(1);
+		}
 
-		List<Metric> metrics = List.of(
-				new Metric("cognitive", "Cognitive complexity, method", "CognitiveComplexity reportLevel", 15, METHOD_COGNITIVE),
-				new Metric("cyclo", "Cyclomatic complexity, method", "CyclomaticComplexity methodReportLevel", 10, METHOD_CYCLO),
-				new Metric("class-cyclo", "Cyclomatic complexity, class total", "CyclomaticComplexity classReportLevel", 80, CLASS_CYCLO),
-				new Metric("ncss", "NCSS, method", "NcssCount methodReportLevel", 30, METHOD_NCSS),
-				new Metric("class-ncss", "NCSS, class (nested classes counted)", "NcssCount classReportLevel", CLASS_NCSS_REFERENCE, applyClassSizeExemptions(CLASS_NCSS, decisions)),
-				new Metric("lambda", "Statements in one lambda body", "LongLambda (XPath)", 30, LAMBDA_STATEMENTS),
-				new Metric("params", "Parameters, method or constructor (record canonical constructors exempt)", "ExcessiveParameterList minimum", 7, METHOD_PARAMS));
+		List<Metric> metrics = metrics(decisions);
 		List<Metric> unfit = new ArrayList<>();
 		for (Metric m : metrics) {
 			if (!report(m, top)) {
@@ -149,9 +148,44 @@ public class PmdMeasure {
 					+ WIRE_CONTAINERS.stream().sorted().collect(Collectors.joining(", ")));
 			System.out.println();
 		}
-		List<Item> cpdBlocks = cpd(target, gated, javaVersion, cpdTokens, top);
+		List<Item> cpdBlocks = cpd(target, gated, javaVersion, cpdTokens, top, true);
 
 		stops(target, allModules, gated, metrics, unfit, cpdBlocks, decisions);
+	}
+
+	/** The gated metrics over what {@link #analyse} collected. */
+	static List<Metric> metrics(Util.Decisions decisions) {
+		return List.of(
+				new Metric("cognitive", "Cognitive complexity, method", "CognitiveComplexity reportLevel", 15, METHOD_COGNITIVE),
+				new Metric("cyclo", "Cyclomatic complexity, method", "CyclomaticComplexity methodReportLevel", 10, METHOD_CYCLO),
+				new Metric("class-cyclo", "Cyclomatic complexity, class total", "CyclomaticComplexity classReportLevel", 80, CLASS_CYCLO),
+				new Metric("ncss", "NCSS, method", "NcssCount methodReportLevel", 30, METHOD_NCSS),
+				new Metric("class-ncss", "NCSS, class (nested classes counted)", "NcssCount classReportLevel", CLASS_NCSS_REFERENCE, applyClassSizeExemptions(CLASS_NCSS, decisions)),
+				new Metric("lambda", "Statements in one lambda body", "LongLambda (XPath)", 30, LAMBDA_STATEMENTS),
+				new Metric("params", "Parameters, method or constructor (record canonical constructors exempt)", "ExcessiveParameterList minimum", 7, METHOD_PARAMS));
+	}
+
+	/** What the PMD gate would cost, for {@code assess}: no output, no exit. */
+	record Summary(long pmdViolations, long cpdBlocks, Map<String, Long> perModule, List<String> unfit, long millis) {
+	}
+
+	/** Runs the measurement quietly, once per process, over the given modules. Throws if PMD cannot analyse a file. */
+	static Summary summarise(Path target, List<Util.Module> gated, String javaVersion, Util.Decisions decisions) throws IOException {
+		long start = System.currentTimeMillis();
+		MeasureRule.MODULES = gated;
+		analyse(target, gated, javaVersion);
+		List<Metric> metrics = metrics(decisions);
+		Map<String, Long> perModule = new TreeMap<>();
+		List<String> unfit = new ArrayList<>();
+		for (Metric m : metrics) {
+			m.items().stream().filter(i -> i.value() >= m.reference()).forEach(i -> perModule.merge(i.module(), 1L, Long::sum));
+			if (!m.items().isEmpty() && m.failing() * 100 > (long) FIT_PERCENT * m.items().size()) {
+				unfit.add(String.format(Locale.ROOT, "%s %d of %d (%.1f%%)", m.title(), m.failing(), m.items().size(), 100.0 * m.failing() / m.items().size()));
+			}
+		}
+		long cpd = cpd(target, gated, javaVersion, 50, 0, false).stream().filter(i -> i.value() >= 100).count();
+		long total = perModule.values().stream().mapToLong(Long::longValue).sum();
+		return new Summary(total, cpd, perModule, unfit, System.currentTimeMillis() - start);
 	}
 
 	// ---- PMD metrics, in-process ---------------------------------------------------------------
@@ -176,7 +210,7 @@ public class PmdMeasure {
 				System.err.println(error.getDetail());
 			}
 			if (!report.getProcessingErrors().isEmpty()) {
-				System.exit(1);
+				throw new IllegalStateException("PMD could not analyse " + report.getProcessingErrors().size() + " file(s)");
 			}
 		}
 	}
@@ -373,7 +407,7 @@ public class PmdMeasure {
 
 	// ---- CPD, in-process ------------------------------------------------------------------------
 
-	static List<Item> cpd(Path target, List<Util.Module> modules, String javaVersion, int minimumTokens, int top) throws IOException {
+	static List<Item> cpd(Path target, List<Util.Module> modules, String javaVersion, int minimumTokens, int top, boolean print) throws IOException {
 		List<Item> blocks = new ArrayList<>();
 		StringBuilder perModule = new StringBuilder();
 		for (Util.Module module : modules) {
@@ -396,6 +430,9 @@ public class PmdMeasure {
 			if (found > 0) {
 				perModule.append(module.path()).append(": ").append(found).append("; ");
 			}
+		}
+		if (!print) {
+			return blocks;
 		}
 		Metric m = new Metric("cpd", "Duplicate blocks (CPD), tokens", "cpd.minimumTokens", 100, blocks);
 		System.out.println("## " + m.title() + "   [" + m.rule() + "]");

@@ -1,0 +1,2 @@
+Order: jacoco, spotbugs, errorprone, pmd, archunit
+SpotBugs goes ahead of Error Prone

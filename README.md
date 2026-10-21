@@ -14,17 +14,17 @@ threshold will do.
 ## Status
 
 Each gate answers one question about the code; the order to install them comes from the code
-base's own signals, which `assess` reads (below), not from the table.
+base's own facts, which `assess` reads (below), not from the table.
 
 | Question | Gate | Cost, cadence | Status |
 |---|---|---|---|
 | Is the code executed by its own tests? | JaCoCo floors | seconds after the tests; every commit | **Proven end to end on two code bases**, measured with floors recorded on a third; the measure detects the surefire argLine trap; the floors are a notification, not a question. |
 | Is executed code wrong in a known shape? | SpotBugs rank 9 plus concurrency | minutes; every change | **Proven end to end on three code bases**: six real findings on the second and four on the third, all concurrency or locking. |
 | Is executed code wrong in a known shape? | Error Prone defaults at ERROR | a compile under JDK 21; every change | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
-| Does the executing test check anything? | PIT, scoped | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | Playbook written from one code base's record; a profile, never a gate. |
 | What must be refactored before the others can see it? | PMD size, complexity and duplication | minutes, then the refactoring; a target, then a gate | **Proven end to end on two code bases**: measured, decided, installed, green, falsified; measured on a third, where the references did not fit (`evidence/agent-journal.md`). |
 | Is the structure drifting? | ArchUnit no-cycles | seconds after compile; every change | **Proven on two code bases**; on the second, gating the cycle-free modules while the core's 13 measured cycles wait for their own session. Layers not yet. |
 | | NullAway, Lincheck | | Outlines. |
+| Does the executing test check anything? (advanced) | PIT, scoped | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | Playbook written from one code base's record; a profile, never a gate, never in the order. |
 
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
 install does not.
@@ -51,8 +51,10 @@ Maven wrapper, and a coding agent that reads Agent Skills (Claude Code, or any o
 
    > install quality gates on this project
 
-   The agent runs `assess`, which reads your code base's signals and prints the gate order it
-   recommends with a reason per gate, records it, and names the first gate. Then it follows that
+   The agent runs `assess`, which works out for each gate whether the build already enforces
+   it, whether it will find something, and what going green costs (it measures PMD and
+   CPD itself, in seconds on the code bases tried), prints the gate order with a reason per
+   move, records it, and names the first gate. Then it follows that
    gate's playbook: measurement, a `STOP` block or two (a notification it records and goes on
    from, or a decision it waits for), the gate in report mode, the refactoring until
    `./mvnw verify` is green. Say "the next gate" for each one after.
@@ -76,10 +78,11 @@ You install the kit as a skill in your coding agent, open a Maven project, and a
 gates. The agent then follows `playbooks/00-assess.md` and the playbook of the gate it names:
 
 1. **Assess.** A script inventories the project: modules, test-support modules, Java level,
-   tooling already in the build; then the signals (tests, a PIT profile without coverage
-   floors, concurrency primitives in main sources, size, churn) and the gate order they
-   recommend, one reason per gate. No build is run. The order is recorded as `GATE_ORDER` and
-   every later run names the next gate from it.
+   tooling already in the build. For each gate it then says whether the build already enforces
+   it (absent, reporting, or gating), whether it will find something (tests per module,
+   concurrency primitives, the measured PMD and CPD cost), and what going green costs, and it
+   prints the gate order with the reason for each move. No build is run. The order is
+   recorded as `GATE_ORDER` and every later run names the next gate from it.
 2. **Measure.** A script computes every metric the gate will enforce for every method, class
    and lambda, and prints the distribution, the worst cases by name, and the cost at the
    kit's threshold: how many fail, and whether the threshold fits this code base.
@@ -187,10 +190,11 @@ name the script: `<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`. On Window
 
 ## The ideas behind it
 
-- **The code base chooses the order.** A gate is installed when the code base's own signals
-  say it is the next question worth answering: coverage first when a mutation run has been
-  scoring never-executed code, SpotBugs early when the new code is a reader thread with a
-  lock. The tier table says how proven a gate is, not when to install it.
+- **The code base chooses the order.** A gate is installed when the code base's own facts say
+  it is the next question worth answering: coverage first because it protects what exists,
+  SpotBugs ahead of Error Prone when main sources carry locks and latches, PMD early when its
+  measured cost is small, and a gate the build already enforces is skipped. The tier table
+  says how proven a gate is, not when to install it.
 - **A stop whose answer is the computed default is a notification, not a decision.** Floors at
   measured minus 2 with nothing in the data against them are recorded and shown, not asked.
 - **Thresholds are constants, not knees.** Calibrated once, confirmed on each code base by a
@@ -206,9 +210,10 @@ name the script: `<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`. On Window
   nothing else. Each is an XPath in your ruleset with the reason beside it.
 - **The measurement equals the gate.** `measure`'s counts are checked against the real plugin's
   report rule by rule. A measurement not checked against the gate is an opinion.
-- **Evidence says which signal predicted the finding.** Each code base's evidence file records,
-  for every real finding a gate made, the `assess` signal that pointed at it, or that none did;
-  that is how the signals earn their place in the order.
+- **Evidence says which fact predicted the finding.** Each code base's evidence file records,
+  for every real finding a gate made, the `assess` fact that pointed at it, or that none did;
+  that is how a rule earns its place in the order. The analysis is itself falsified: tiny
+  fixture projects with a known answer (`fixtures/assess/`) run in CI.
 
 ## Layout
 
@@ -229,7 +234,7 @@ Java SDK, where they were confirmed unchanged): the five gates in the status tab
 a measure script, a playbook, a plant that turns the build red, and evidence. A third,
 agent-journal, applied the kit through its own README without the author in the loop
 (JaCoCo and SpotBugs installed; PMD measured, and the first code base where the references did
-not fit), and its feedback became the gate order from signals and the notify/decide stops.
+not fit), and its feedback became the gate order from three questions and the notify/decide stops.
 
 Next, in order:
 

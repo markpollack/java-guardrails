@@ -1,0 +1,3 @@
+package fx;
+
+class PlainTest { }

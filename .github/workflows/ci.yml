@@ -34,8 +34,24 @@ jobs:
           ./jbang version
           ./jbang alias list
           for s in scripts/*.java; do ./jbang build "$s"; done
-          ./jbang scripts/Assess.java .
+          ./jbang scripts/Assess.java . --quick
           ./jbang scripts/Falsify.java . 2>&1 | grep -q 'name the gate' || (echo "falsify usage message missing" && exit 1)
+      - name: Assess fixtures produce the order and states their rules say
+        run: |
+          fail=0
+          for f in fixtures/assess/*/; do
+            out=$(./jbang scripts/Assess.java "$f" --quick 2>&1)
+            while IFS= read -r l; do
+              [ -z "$l" ] && continue
+              echo "$out" | grep -qF -- "$l" || { echo "::error::$f: missing: $l"; fail=1; }
+            done < "$f/expected-quick.txt"
+          done
+          out=$(./jbang scripts/Assess.java fixtures/assess/plain 2>&1)
+          while IFS= read -r l; do
+            [ -z "$l" ] && continue
+            echo "$out" | grep -qF -- "$l" || { echo "::error::plain measured: missing: $l"; fail=1; }
+          done < fixtures/assess/plain/expected-measured.txt
+          exit $fail
       - name: SKILL.md validates against the Agent Skills spec
         run: npx -y skills-ref validate .
       - name: Manifests are valid JSON and point at the root

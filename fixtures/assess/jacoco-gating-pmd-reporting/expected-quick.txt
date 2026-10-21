@@ -1,0 +1,3 @@
+Order: errorprone, spotbugs, pmd, archunit
+JaCoCo floors is already gating here
+PMD size, complexity, duplication is in the build but only reporting

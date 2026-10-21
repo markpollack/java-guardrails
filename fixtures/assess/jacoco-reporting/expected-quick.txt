@@ -1,0 +1,3 @@
+Order: jacoco, errorprone, spotbugs, pmd, archunit
+| reporting |
+JaCoCo floors is in the build but only reporting

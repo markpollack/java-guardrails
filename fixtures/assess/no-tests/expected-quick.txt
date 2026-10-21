@@ -1,0 +1,2 @@
+Order: errorprone, spotbugs, pmd, archunit, jacoco
+coverage goes last

@@ -1,0 +1,2 @@
+Order: jacoco, errorprone, spotbugs, pmd, archunit
+| absent | not predictable

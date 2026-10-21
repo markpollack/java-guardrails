@@ -37,8 +37,8 @@ lower one only with a reason in the commit. Nothing is excluded.
    request, found by writing tests to hold a floor). Code reached only from another module's
    tests counts as uncovered in its own module: that is a test to write there, not a floor to
    lower. Commit with the measured ratios and floors in the body; append to `evidence/` with
-   the `assess` signal that predicted the finding (a PIT profile without coverage floors: the
-   mutation run was scoring never-executed code), or that none did.
+   the `assess` fact that predicted the finding (a module with main code and no tests, or a
+   low tests-per-main ratio), or that none did.
 
 ## Known shapes
 

@@ -7,16 +7,27 @@ base rather than the kit's default. Numbers below are from that project's own ru
 to the kit (its `config/guardrails/decisions.md` and measure logs), re-measured here with the
 kit's scripts where a build was not needed.
 
-## The order, and the signals that predicted it
+## The order, and what predicted it
 
 The project recorded `GATE_ORDER: jacoco, spotbugs, errorprone, pmd, archunit; pit scoped-only`
-by hand, with reasons: a PIT profile had just shown 34 never-executed mutants in one class (a
-coverage fact), and the new code was a reader thread with a lock and a latch (SpotBugs'
-territory). `assess` with the signals added the same day recommends exactly that order from
-what it reads without a build: 154 test-source files, a PIT profile in two modules, 13
-main-source files using concurrency primitives (journal-core 11), Java 17, 196 files in 8
-modules. The first-gate signal was the PIT-without-floors signal; the second-gate signal was
-concurrency.
+by hand, with reasons: coverage first (a PIT run had shown 34 never-executed mutants in one
+class, a fact line coverage gives in seconds, and the floors protect what exists), then SpotBugs
+because the new code was a reader thread with a lock and a latch.
+
+`assess` as first built read "a PIT profile and no coverage floors" as the signal for coverage
+first. That was one project's story, and almost no developer would lean on PIT first. The rule
+was replaced the same day by three questions per gate (`playbooks/00-assess.md`): coverage is
+first in the base sequence because it protects what exists and needs no decision; concurrency
+(13 main-source files, `journal-core` 11) moves SpotBugs ahead of Error Prone; PMD, measured by
+`assess` itself in about 2 seconds, is 154 violations and 4 duplicate blocks with test support
+left out, so it stays behind the bug finders. On the tree as it was when the project recorded its
+order (JaCoCo and SpotBugs installed), `assess` reports both as gating and names Error Prone,
+PMD, ArchUnit next. On the branch a few hours later, with Error Prone, PMD (ratchet) and
+NullAway added by the project, it reports four gates gating and ArchUnit as the one left.
+
+Predicted or not, for the record: concurrency pointed at SpotBugs (hit, in an older class in the
+same territory); the test-to-main ratio had no finding to predict (every module has tests); PMD
+was measured, not predicted.
 
 ## JaCoCo, measured per module by its own tests
 
@@ -28,9 +39,8 @@ obviously good. You don't need to ask me, just do it." That is the origin of the
 
 4 findings, all `USO_UNSAFE_METHOD_SYNCHRONIZATION` in one older class; fixed, `falsify spotbugs`
 red then restored, re-measured at zero, committed with the measurement in the body. Long tail
-169, of which 139 `EI_EXPOSE_REP*` on records, as on the MCP SDK. Signal that predicted it: the
-concurrency signal pointed at the new launcher; the findings were in an older class in the same
-territory. A hit for the gate, a partial hit for the signal.
+169, of which 139 `EI_EXPOSE_REP*` on records, as on the MCP SDK. The concurrency fact pointed at the new launcher; the findings were in an older class in the same
+territory. A hit for the gate, a partial hit for the fact.
 
 ## PMD and CPD, measured by the kit, not installed
 

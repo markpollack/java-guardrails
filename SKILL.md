@@ -34,8 +34,12 @@ JBang reads `jbang-catalog.json` from where it is run. They need only a JDK.
 5. Flip to fail and commit with the measurement in the body.
 
 The gates, each with the question it answers and its playbook. **The order to install them
-comes from `assess`**, which reads the code base's own signals and records `GATE_ORDER`
-(`playbooks/00-assess.md`); the tier says how proven a gate is, not when to install it.
+comes from `assess`**, which answers three questions per gate from the code base itself:
+is the question already answered here (absent, reporting or gating), will the gate find
+something (tests per module, concurrency, the measured PMD cost), and what does going green
+cost. It prints the order with the reason for each move and records `GATE_ORDER`
+(`playbooks/00-assess.md` has the rules). Follow the order; do not reorder it yourself, the
+owner edits the line. The tier says how proven a gate is, not when to install it.
 
 | Gate | Question it answers | Cost, cadence | Playbook | Status |
 |---|---|---|---|---|
@@ -44,8 +48,8 @@ comes from `assess`**, which reads the code base's own signals and records `GATE
 | Error Prone defaults at ERROR | Is executed code wrong in a known shape? | a compile under JDK 21; every change | `playbooks/11-errorprone.md` | proven on two code bases |
 | PMD size, complexity and duplication | What must be refactored before the others can see it? | minutes, then the refactoring; a target, then a gate | `playbooks/10-pmd.md` | proven on two code bases; measured on a third |
 | ArchUnit no-cycles, then layers | Is the structure drifting? | seconds; every change | `playbooks/20-archunit.md` | no-cycles proven on two code bases; layers not yet |
-| PIT, scoped | Does the executing test check anything? | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | `playbooks/32-pit.md` | written from one code base's record; not a gate |
 | NullAway, Lincheck | tier 3 | | `playbooks/30-*.md`, `31-*.md` | outline |
+| PIT, scoped (advanced) | Does the executing test check anything? | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | `playbooks/32-pit.md` | written from one code base's record; a profile, not a gate, never in the order |
 
 Follow a playbook step by step. Every step is marked **script**, **AI**, **notify** or **stop**.
 Do not write a gate's playbook from memory; an outline means the gate is not yet proven and you
@@ -95,7 +99,7 @@ is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's ow
 ## Scripts
 
 ```
-<kit>/jbang <kit>/scripts/Assess.java       <target>      # inventory, signals, gate order, the next gate; run this first and after every gate
+<kit>/jbang <kit>/scripts/Assess.java       <target> [--quick]   # gate analysis, order, the next gate; run this first and after every gate
 <kit>/jbang <kit>/scripts/PmdMeasure.java   <target> [--top N] [--cpd-tokens N] [--exclude module,module]
 <kit>/jbang <kit>/scripts/ErrorProneMeasure.java <target> [--top N]   # needs the errorprone profile installed and JDK 21+
 <kit>/jbang <kit>/scripts/SpotBugsMeasure.java   <target> [--top N]     # needs the plugin slice installed
@@ -104,9 +108,9 @@ is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's ow
 <kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd | errorprone | spotbugs | jacoco | archunit
 ```
 
-`assess` reads files and the git log, runs no build, and says what is there, the gate order the
-code base's signals recommend, the next gate from the recorded order, and the scoped PIT command
-when a profile exists. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
+`assess` reads files and the git log, runs PMD and CPD in-process under a time limit
+(`--quick` skips it) and no build, and says what is there, each gate's state, the gate order,
+the next gate from the recorded order, and the scoped PIT command when a profile exists. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
 needs no build. `falsify` plants in the first class of the first module, runs that module's check
 goal through the target's `mvnw`, restores the file byte for byte, and passes only if the build
 went red and the module's report names the plant.
@@ -116,8 +120,8 @@ went red and the module's report names the plant.
 - `configs/` the files copied into `<target>/config/`: the PMD ruleset with every threshold's
   reason beside it, SpotBugs filters, Error Prone lists, the ArchUnit template.
 - `maven/` the plugin blocks and properties to paste into the target's root pom.
-- `evidence/` what each gate found on each code base, and which `assess` signal predicted it;
+- `evidence/` what each gate found on each code base, and which `assess` fact predicted it;
   the source of the thresholds. Read `evidence/acp-java.md`, `evidence/mcp-java-sdk.md` and
   `evidence/agent-journal.md` before claiming a threshold fits. When you append to it, say which
-  signal predicted each real finding, or that none did.
+  fact predicted each real finding, or that none did.
 - `README.md` the front door for people.

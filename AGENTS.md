@@ -20,7 +20,7 @@ JBang wrapper, which compiles them on first use and needs only a JDK:
 ./jbang <alias> --help             # Windows: jbang.cmd or jbang.ps1
 ```
 
-The gate before a commit: every alias in `jbang-catalog.json` runs through `./jbang`, and a script
+The gate before a commit: the `fixtures/assess/` expectations hold (the loop is in `fixtures/assess/README.md` and CI); every alias in `jbang-catalog.json` runs through `./jbang`, and a script
 change is proven against a real target project, with its planted-violation case shown red, before
 it is committed. CI only repeats a run already known to pass locally.
 

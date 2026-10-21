@@ -45,8 +45,8 @@ was never written.
    planting it on 2026-10-08. The include list is proven by reading
    `config/spotbugs/spotbugs-include.xml` against the measure's "every rank" run.
 6. **AI** — `./mvnw verify` green; commit with the counts at the gate and below it; append the
-   code base to `evidence/`, with the `assess` signal that predicted each finding (on
-   agent-journal and the MCP SDK: the concurrency signal), or that none did.
+   code base to `evidence/`, with the `assess` fact that predicted each finding (on
+   agent-journal and the MCP SDK: the concurrency fact), or that none did.
 
 ## Known shapes
 
