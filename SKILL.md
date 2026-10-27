@@ -60,6 +60,10 @@ For NullAway, follow playbook 30: inventory package defaults, choose adoption sc
 fix, and falsify each claimed package. It needs Error Prone's compiler integration; other Error
 Prone findings need not be cleaned up first. NullAway is outside the default `GATE_ORDER` in this
 increment. A configured processor with no marked scope, or a zero report count, is not proof.
+Falsification requires a green valid-probe control followed by a red nullable-return probe with
+the same gate flags. It proves the package default on a new unannotated class only; audit existing
+declarations and configuration separately for opt-outs, suppressions and exclusions. Selective
+Error Prone checking does not disable javac warnings; `failOnWarning` can stop analysis first.
 
 ## Stops: notify or decide
 

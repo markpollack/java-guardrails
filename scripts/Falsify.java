@@ -22,7 +22,7 @@ public class Falsify {
 		Path target = Util.target(args);
 		String gate = args.length > 0 ? args[args.length - 1] : "";
 		if (args.length > 1 && args[1].equals("nullaway")) {
-			falsifyNullAway(target, args);
+			System.exit(falsifyNullAway(target, args));
 			return;
 		}
 		if (!List.of("pmd", "cpd", "errorprone", "spotbugs", "jacoco", "archunit").contains(gate)) {
@@ -74,7 +74,7 @@ public class Falsify {
 	}
 
 	/** Plant in an EXISTING marked package: adding a marker to the probe would hide missing adoption scope. */
-	static void falsifyNullAway(Path target, String[] args) throws Exception {
+	static int falsifyNullAway(Path target, String[] args) throws Exception {
 		NullAwaySupport.requireProfile(target);
 		String selectedModule = NullAwaySupport.option(args, "--module");
 		String selectedPackage = NullAwaySupport.option(args, "--package");
@@ -84,7 +84,7 @@ public class Falsify {
 		if (scope.isEmpty()) {
 			System.err.println("falsify nullaway: NOT PROVEN; no selected package has JSpecify @NullMarked. "
 					+ "Choose and mark a package first (playbook 30). No sources changed.");
-			System.exit(1);
+			return 1;
 		}
 		var pkg = scope.orElseThrow();
 		Path probe = pkg.directory().resolve("GuardrailsNullAwayProbe.java");
@@ -92,17 +92,30 @@ public class Falsify {
 				+ "// planted by java-guardrails falsify: must never be committed\n"
 				+ "final class GuardrailsNullAwayProbe {\n"
 				+ "  static String guardrailsPlantedViolation() { return null; }\n}\n";
-		// CREATE_NEW prevents overwriting a target-owned file, and cleanup happens only after successful creation.
-		Files.writeString(probe, source, java.nio.file.StandardOpenOption.CREATE_NEW);
 		StringBuilder output = new StringBuilder();
 		int exit;
-		try {
+		try (var owned = new NullAwaySupport.Probe(probe)) {
+			// Change only the return expression between two compiles with identical gate flags.
+			// The valid control must pass: a pre-existing failure cannot prove this diagnostic fatal.
+			owned.create(source.replace("return null;", "return \"\";"));
+			StringBuilder control = new StringBuilder();
+			int controlExit = NullAwaySupport.compile(target, pkg.module().path(), false, control);
+			if (controlExit != 0) {
+				System.err.println(control);
+				System.err.println("falsify nullaway: FAILED; NOT PROVEN; valid-probe control compile already fails (exit " + controlExit + "). "
+						+ (control.toString().contains("warnings found and -Werror specified")
+								? "The module has javac warnings; -Werror can stop analysis before NullAway runs. " : "")
+						+ "Clear the existing build failure or explicitly select the intended checks before retrying.");
+				return 1;
+			}
+			owned.write(source);
 			System.out.println("falsify nullaway: planting in " + pkg.key());
 			exit = NullAwaySupport.compile(target, pkg.module().path(), false, output);
 		}
-		finally {
-			Files.delete(probe);
-			System.out.println("falsify nullaway: removed the planted class");
+		catch (java.nio.file.FileAlreadyExistsException e) {
+			System.err.println("falsify nullaway: NOT PROVEN; existing probe left untouched: " + probe
+					+ ". Inspect it before manually removing a verified leftover.");
+			return 1;
 		}
 		boolean named = output.toString().lines().anyMatch(line -> line.contains("GuardrailsNullAwayProbe.java:[")
 				&& line.contains("[NullAway]") && line.contains("returning @Nullable"));
@@ -110,9 +123,11 @@ public class Falsify {
 			System.err.println(output);
 			System.err.println("falsify nullaway: FAILED; build exit " + exit + ", planted NullAway diagnostic "
 					+ (named ? "reported" : "not reported") + "; the selected scope is NOT PROVEN");
-			System.exit(1);
+			return 1;
 		}
-		System.out.println("falsify nullaway: OK, build red and [NullAway] reported the planted nullable return in " + pkg.key());
+		System.out.println("falsify nullaway: OK, valid control green, nullable return red with [NullAway] in " + pkg.key()
+				+ "; new unannotated probe only; existing declaration opt-outs and exclusions are not audited");
+		return 0;
 	}
 
 	/** The rules that reported the planted member, from the module's PMD or CPD report, or the compiler output for Error Prone. */

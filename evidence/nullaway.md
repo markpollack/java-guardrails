@@ -11,7 +11,7 @@ non-null method produces one unique NullAway report finding and fails the ordina
 Fixing it produces zero findings; falsification then proves the gate with a new nullable return
 inside the existing marked package. Disabling NullAway cannot pass that proof. Comment-only
 markers, an unrelated compiler failure, and a colliding target-owned probe cannot pass either.
-Sources remain unchanged after the probe, including negative runs. The fixture also compiles a
+Sources remain unchanged after the probe, including negative runs that complete normally. The fixture also compiles a
 dropped exception with other Error Prone checks disabled, while the NullAway plant still fails:
 other Error Prone cleanup is not a prerequisite for nullness adoption.
 
@@ -46,4 +46,21 @@ Commands, invoked from the kit with the scratch target substituted for `<target>
 Prediction: no existing assess rule predicted these findings. Package marking exposed incomplete
 nullability contracts already documented in the API; this experiment establishes annotation and
 enforcement mechanics, not three new runtime bugs. It proves only the selected package, not
-whole-SDK null safety or nullness across unmarked module boundaries.
+whole-SDK null safety or nullness across unmarked module boundaries. More precisely, the new-class
+probe proves the package default on that unannotated class. It does not audit whether existing
+classes and methods opt out, suppress the check or match compiler exclusions.
+
+## Additional local compiler controls
+
+`./jbang tests/NullAwayAdversarialTest.java .` includes the original compiler suite and adds
+warning-only versus enforced-WARN checks, declaration opt-outs, javac warnings, same-line
+diagnostic columns, upstream reactor scope, colored/quiet output, marker text inside an
+annotation string, and Linux process-group SIGINT. A package excluded by
+`UnannotatedSubPackages` also rejects an incorrectly self-marking probe.
+
+Falsification now requires a green valid-probe control, then changes only its return expression
+to null and requires a red compile and the named NullAway diagnostic. This preserves a WARN
+check enforced by `failOnWarning=true`, while rejecting pre-existing compiler failures as proof.
+The quiet-report case is refused rather than misreported as zero. Ordinary shutdown cleanup is
+tested on Linux; SIGKILL, JVM crashes, Windows and newer Maven/compiler output formats remain
+outside this evidence.

@@ -34,6 +34,12 @@ For nullness checking, ask to adopt NullAway on a selected package (`playbooks/3
 It runs through Error Prone's compiler integration; you can select NullAway before cleaning up
 other Error Prone checks. `measure-nullaway --inventory` lists package defaults without a build.
 The report and planted-violation proof require the profile, JSpecify, and JDK 21+.
+The proof compares a green valid probe with a red nullable-return probe using the same flags.
+It establishes enforcement on a new unannotated class; existing declaration opt-outs,
+suppressions and exclusions need a separate audit. Selective Error Prone checking still leaves
+javac warnings subject to `failOnWarning`; clear those warnings or explicitly choose an
+ERROR-level NullAway gate without gating javac warnings. Measurement requires normal Maven
+logging; quiet output is refused rather than counted as zero.
 
 ## Getting started
 

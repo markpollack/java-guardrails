@@ -24,7 +24,9 @@ recorded gate orders continue to work.
    It lists `module=package`, file counts, and JSpecify package defaults. The inventory counts
    exact package annotations, not class/method markers or `@NullUnmarked` exceptions. A package
    default does not apply to child packages. This first increment does not measure annotation
-   coverage inside methods and classes.
+   coverage inside methods and classes, or audit `@NullUnmarked`, suppressions and configured
+   exclusions. All existing classes could opt out while a new probe is still checked. Review
+   existing declarations and checker configuration before claiming their coverage.
 2. **AI** — use the compiler integration from playbook 11 if absent: the profile in
    `maven/errorprone.profile.xml`, its Error Prone/NullAway properties, and `maven/jvm.config`.
    Match the target's main compile execution ID; preserve its other annotation processors.
@@ -46,31 +48,45 @@ recorded gate orders continue to work.
    Omit `--module` to compile the reactor. The script runs `clean compile` through the target's
    Maven wrapper, with the `errorprone` profile and dependencies of the selected module (`-am`).
    It demotes errors to warnings for this invocation, groups unique NullAway diagnostics by
-   file and line, and exits nonzero when the report-mode build fails. It changes no source or
+   file, line and column, and exits nonzero when the report-mode build fails. With `--module`,
+   its main count covers the selected module; findings from other reactor sources built by
+   `-am` appear separately as upstream findings. A dependency build failure still makes the
+   report partial. It changes no source or
    POM. Other checks may still report; fix build failures before trusting the count. A zero
-   count alone cannot show that the checker ran.
+   count alone cannot show that the checker ran. ANSI colors are stripped before parsing. If
+   Maven logging hides warnings (for example `.mvn/maven.config` contains `-q`), the script
+   refuses to report a count; use normal logging for measurement.
 5. **AI** — fix the marked package. Use `org.jspecify.annotations.Nullable` on genuinely
    nullable parameters, returns, record components and type arguments; check before dereference.
    Annotate the declaration that owns the contract, including interfaces. Do not introduce a
    null check that changes an intentionally nullable API into a rejecting one. Add behavioral
    tests for discovered bugs. Narrow, explained configuration exceptions require evidence;
    neither removing the marker nor adding blanket suppressions is a fix.
-6. **Script** — prove the gate on that **existing** package:
+6. **Script** — prove enforcement on a new unannotated class in that **existing** package:
 
    ```
    <kit>/jbang <kit>/scripts/Falsify.java <target> nullaway --module module-path --package com.example.api
    ```
 
-   It creates a reserved probe with a nullable return in the selected marked package,
-   runs the real fail-mode compile, and removes the probe in `finally`. It does not add a
-   marker or enable a disabled checker to manufacture success. It passes only when the build
-   fails and a `[NullAway]` diagnostic on the probe names the nullable return. A green build,
-   missing marker, unrelated failure, or existing probe file cannot pass. Without selectors it
-   uses the first marked package in path order; explicitly select each package you claim proven.
+   It first creates a reserved probe with a valid return and requires a green control compile.
+   It then changes only the return expression to `null` and requires a red compile plus a
+   `[NullAway]` diagnostic naming that return. Both builds use the same real gate flags. This
+   accepts a WARN check legitimately enforced by `failOnWarning=true`, but cannot mistake a
+   pre-existing build failure for a fatal NullAway finding. It does not add a marker or enable
+   a disabled checker to manufacture success. Without selectors it uses the first marked
+   package in path order. Success proves enforcement on this new unannotated class only;
+   it does not audit existing declarations for opt-outs, suppressions or exclusions.
+
+   Normal completion and ordinary JVM shutdown (including Ctrl-C/SIGINT and SIGTERM) attempt
+   to remove the owned probe. An existing probe is refused without overwriting it. A changed
+   or replaced probe is left untouched with a cleanup diagnostic. SIGKILL, a JVM crash or
+   power loss cannot run cleanup: inspect and manually remove only a verified leftover before
+   retrying. Do not commit a planted probe.
 7. **Script** — after restoration, run the target's normal tests and gated compile. `clean`
    removes any compiled probe left by a negative control. Re-measure and record the package
    scope, findings, fixes, full command and planted-failure proof in evidence; state whether an
-   assess fact predicted each finding. Claim only the scope falsified. Commit that package's
+   assess fact predicted each finding. Record the new-class proof separately from the audit of
+   existing declaration coverage. Commit that package's
    adoption, then repeat for the next one.
 
 ## Enabling NullAway selectively
@@ -86,6 +102,13 @@ Keep the other compiler arguments and both processor dependencies from the slice
 explicit selection of NullAway; do not apply it over a target's already accepted Error Prone gate.
 Report mode remains `errorprone.failOnWarning=false` plus
 `errorprone.extraArgs=-XepAllErrorsAsWarnings`; the script passes these for that run only.
+
+`-XepDisableAllChecks` disables other Error Prone checks, not javac's own warnings. A removal
+or lint warning under `failOnWarning=true` can stop compilation before NullAway runs. Clear
+those javac warnings before proving the gate. If the owner explicitly chooses NullAway at
+ERROR without gating javac warnings, setting `errorprone.failOnWarning=false` still leaves
+NullAway errors fatal; do not assume WARN-only NullAway is enforced with that setting. The
+valid-probe control compile must pass before any NullAway proof is accepted.
 
 ## References
 
