@@ -5,7 +5,7 @@ license: Business Source License 1.1; see LICENSE
 compatibility: Requires a JDK 17 or newer and a Maven project with the Maven wrapper. The bundled JBang wrapper resolves everything else on first run. Gradle is not yet supported.
 metadata:
   author: markpollack
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # java-guardrails
@@ -48,12 +48,18 @@ owner edits the line. The tier says how proven a gate is, not when to install it
 | Error Prone defaults at ERROR | Is executed code wrong in a known shape? | a compile under JDK 21; every change | `playbooks/11-errorprone.md` | proven on two code bases |
 | PMD size, complexity and duplication | What must be refactored before the others can see it? | minutes, then the refactoring; a target, then a gate | `playbooks/10-pmd.md` | proven on two code bases; measured on a third |
 | ArchUnit no-cycles, then layers | Is the structure drifting? | seconds; every change | `playbooks/20-archunit.md` | no-cycles proven on two code bases; layers not yet |
-| NullAway, Lincheck | tier 3 | | `playbooks/30-*.md`, `31-*.md` | outline |
+| NullAway (optional, explicit package scope) | Can null cross a non-null contract? | a compile under JDK 21; every change | `playbooks/30-nullaway.md` | measurement and falsification implemented; see `evidence/nullaway.md` for proven scope |
+| Lincheck | tier 3 | | `playbooks/31-lincheck.md` | outline |
 | PIT, scoped (advanced) | Does the executing test check anything? | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | `playbooks/32-pit.md` | written from one code base's record; a profile, not a gate, never in the order |
 
 Follow a playbook step by step. Every step is marked **script**, **AI**, **notify** or **stop**.
 Do not write a gate's playbook from memory; an outline means the gate is not yet proven and you
 say so.
+
+For NullAway, follow playbook 30: inventory package defaults, choose adoption scope, measure,
+fix, and falsify each claimed package. It needs Error Prone's compiler integration; other Error
+Prone findings need not be cleaned up first. NullAway is outside the default `GATE_ORDER` in this
+increment. A configured processor with no marked scope, or a zero report count, is not proof.
 
 ## Stops: notify or decide
 
@@ -105,7 +111,9 @@ is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's ow
 <kit>/jbang <kit>/scripts/SpotBugsMeasure.java   <target> [--top N]     # needs the plugin slice installed
 <kit>/jbang <kit>/scripts/JacocoMeasure.java     <target>               # needs nothing installed; runs the tests
 <kit>/jbang <kit>/scripts/ArchUnitMeasure.java   <target> [--top N]     # needs nothing installed; compiles
-<kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd | errorprone | spotbugs | jacoco | archunit
+<kit>/jbang <kit>/scripts/NullAwayMeasure.java   <target> [--module path] [--inventory] # inventories without a build; otherwise needs the profile and JDK 21
+<kit>/jbang <kit>/scripts/Falsify.java      <target> pmd | cpd | errorprone | spotbugs | jacoco | archunit | nullaway
+<kit>/jbang <kit>/scripts/Falsify.java      <target> nullaway [--module path] [--package com.example] # existing JSpecify-marked package
 ```
 
 `assess` reads files and the git log, runs PMD and CPD in-process under a time limit

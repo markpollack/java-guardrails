@@ -23,11 +23,17 @@ base's own facts, which `assess` reads (below), not from the table.
 | Is executed code wrong in a known shape? | Error Prone defaults at ERROR | a compile under JDK 21; every change | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
 | What must be refactored before the others can see it? | PMD size, complexity and duplication | minutes, then the refactoring; a target, then a gate | **Proven end to end on two code bases**: measured, decided, installed, green, falsified; measured on a third, where the references did not fit (`evidence/agent-journal.md`). |
 | Is the structure drifting? | ArchUnit no-cycles | seconds after compile; every change | **Proven on two code bases**; on the second, gating the cycle-free modules while the core's 13 measured cycles wait for their own session. Layers not yet. |
-| | NullAway, Lincheck | | Outlines. |
+| Can null cross a non-null contract? | NullAway, explicit package scope | a compile under JDK 21; every change | Measurement and falsification implemented; see `evidence/nullaway.md` for the scope proven. Optional, outside the default gate order. |
+| | Lincheck | | Outline. |
 | Does the executing test check anything? (advanced) | PIT, scoped | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | Playbook written from one code base's record; a profile, never a gate, never in the order. |
 
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
 install does not.
+
+For nullness checking, ask to adopt NullAway on a selected package (`playbooks/30-nullaway.md`).
+It runs through Error Prone's compiler integration; you can select NullAway before cleaning up
+other Error Prone checks. `measure-nullaway --inventory` lists package defaults without a build.
+The report and planted-violation proof require the profile, JSpecify, and JDK 21+.
 
 ## Getting started
 
@@ -182,6 +188,9 @@ taking the change is your decision.
 ./jbang falsify <target> spotbugs
 ./jbang falsify <target> jacoco
 ./jbang falsify <target> archunit
+./jbang measure-nullaway <target> --inventory       # package defaults, no build
+./jbang measure-nullaway <target> --module module-path
+./jbang falsify <target> nullaway --module module-path --package com.example
 ```
 
 The aliases resolve from `jbang-catalog.json` in the current directory, so from anywhere else
@@ -245,7 +254,7 @@ Next, in order:
 - **Gradle**: the measures already work on Gradle projects; the gate install does not.
 - **ArchUnit, the rest**: breaking cycles that run through public types, and a layering rule
   the owner confirms.
-- **Tier 3**: NullAway and Lincheck from the first code base's record; PIT's scoped playbook
+- **Tier 3**: Lincheck from the first code base's record; PIT's scoped playbook
   is written, a script to run it is not.
 - **Windows** proof of the scripts, and a self-test fixture so CI runs the measures and the
   plants against known counts.

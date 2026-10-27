@@ -1,6 +1,7 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 17+
 //SOURCES Util.java
+//SOURCES NullAwaySupport.java
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,15 +14,19 @@ import java.util.stream.Stream;
  * step that should fail, and restoring the file byte for byte. Exit 0 means the gate caught the
  * plant (red as expected); exit 1 means the build stayed green, so the gate checks nothing.
  *
- * Usage: {@code ./jbang falsify [target] <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone}, {@code spotbugs}, {@code jacoco} or {@code archunit}.
+ * Usage: {@code ./jbang falsify <target> <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone}, {@code spotbugs}, {@code jacoco}, {@code archunit} or {@code nullaway}.
  */
 public class Falsify {
 
 	public static void main(String[] args) throws Exception {
 		Path target = Util.target(args);
 		String gate = args.length > 0 ? args[args.length - 1] : "";
+		if (args.length > 1 && args[1].equals("nullaway")) {
+			falsifyNullAway(target, args);
+			return;
+		}
 		if (!List.of("pmd", "cpd", "errorprone", "spotbugs", "jacoco", "archunit").contains(gate)) {
-			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs | jacoco | archunit");
+			System.err.println("falsify: name the gate to falsify: pmd | cpd | errorprone | spotbugs | jacoco | archunit | nullaway");
 			System.exit(2);
 		}
 		if (gate.equals("archunit")) {
@@ -66,6 +71,48 @@ public class Falsify {
 			System.exit(1);
 		}
 		System.out.println("falsify " + gate + ": OK, build red (exit " + exit + ") and the planted violation was reported by " + fired);
+	}
+
+	/** Plant in an EXISTING marked package: adding a marker to the probe would hide missing adoption scope. */
+	static void falsifyNullAway(Path target, String[] args) throws Exception {
+		NullAwaySupport.requireProfile(target);
+		String selectedModule = NullAwaySupport.option(args, "--module");
+		String selectedPackage = NullAwaySupport.option(args, "--package");
+		var scope = NullAwaySupport.packages(target, selectedModule).stream()
+				.filter(NullAwaySupport.PackageScope::marked)
+				.filter(p -> selectedPackage.isEmpty() || p.name().equals(selectedPackage)).findFirst();
+		if (scope.isEmpty()) {
+			System.err.println("falsify nullaway: NOT PROVEN; no selected package has JSpecify @NullMarked. "
+					+ "Choose and mark a package first (playbook 30). No sources changed.");
+			System.exit(1);
+		}
+		var pkg = scope.orElseThrow();
+		Path probe = pkg.directory().resolve("GuardrailsNullAwayProbe.java");
+		String source = (pkg.name().isEmpty() ? "" : "package " + pkg.name() + ";\n")
+				+ "// planted by java-guardrails falsify: must never be committed\n"
+				+ "final class GuardrailsNullAwayProbe {\n"
+				+ "  static String guardrailsPlantedViolation() { return null; }\n}\n";
+		// CREATE_NEW prevents overwriting a target-owned file, and cleanup happens only after successful creation.
+		Files.writeString(probe, source, java.nio.file.StandardOpenOption.CREATE_NEW);
+		StringBuilder output = new StringBuilder();
+		int exit;
+		try {
+			System.out.println("falsify nullaway: planting in " + pkg.key());
+			exit = NullAwaySupport.compile(target, pkg.module().path(), false, output);
+		}
+		finally {
+			Files.delete(probe);
+			System.out.println("falsify nullaway: removed the planted class");
+		}
+		boolean named = output.toString().lines().anyMatch(line -> line.contains("GuardrailsNullAwayProbe.java:[")
+				&& line.contains("[NullAway]") && line.contains("returning @Nullable"));
+		if (exit == 0 || !named) {
+			System.err.println(output);
+			System.err.println("falsify nullaway: FAILED; build exit " + exit + ", planted NullAway diagnostic "
+					+ (named ? "reported" : "not reported") + "; the selected scope is NOT PROVEN");
+			System.exit(1);
+		}
+		System.out.println("falsify nullaway: OK, build red and [NullAway] reported the planted nullable return in " + pkg.key());
 	}
 
 	/** The rules that reported the planted member, from the module's PMD or CPD report, or the compiler output for Error Prone. */

@@ -68,6 +68,11 @@ test-named classes) are left out of the measurement and of the test counts unles
 file says otherwise. PIT is advanced and not in the order. The table shows it, and the scoped
 command is printed when a profile exists (`playbooks/32-pit.md`).
 
+NullAway is an optional package-adoption step (`playbooks/30-nullaway.md`), outside the default
+order in this increment. `assess` lists package defaults and processor presence; neither proves
+the scope is enforced. Use `measure-nullaway` and `falsify nullaway` to establish that. Error
+Prone's compiler integration is required; cleanup of unrelated Error Prone checks is not.
+
 ## The questions, the costs, the cadences
 
 | Question | Gate | Cost | Cadence |

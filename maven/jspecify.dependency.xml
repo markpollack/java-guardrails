@@ -1,0 +1,7 @@
+<!-- Add to the dependencies of each module using the annotations. If annotations are exposed
+     in public APIs, retain this dependency for consumers; do not put it only on the processor path. -->
+<dependency>
+    <groupId>org.jspecify</groupId>
+    <artifactId>jspecify</artifactId>
+    <version>1.0.0</version>
+</dependency>

@@ -52,6 +52,8 @@ jobs:
             echo "$out" | grep -qF -- "$l" || { echo "::error::plain measured: missing: $l"; fail=1; }
           done < fixtures/assess/plain/expected-measured.txt
           exit $fail
+      - name: NullAway compiler proof and negative controls
+        run: ./jbang tests/NullAwayTest.java .
       - name: SKILL.md validates against the Agent Skills spec
         run: npx -y skills-ref validate .
       - name: Manifests are valid JSON and point at the root

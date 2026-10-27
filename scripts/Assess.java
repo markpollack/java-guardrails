@@ -4,6 +4,7 @@
 //DEPS org.slf4j:slf4j-simple:1.7.36
 //SOURCES Util.java
 //SOURCES PmdMeasure.java
+//SOURCES NullAwaySupport.java
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -46,7 +47,7 @@ public class Assess {
 		TOOLING.put("maven-pmd-plugin", "PMD (the kit's gate)");
 		TOOLING.put("spotbugs-maven-plugin", "SpotBugs (the kit's gate)");
 		TOOLING.put("error_prone_core", "Error Prone (the kit's gate)");
-		TOOLING.put("nullaway", "NullAway (tier 3)");
+		TOOLING.put("nullaway", "NullAway (package-by-package; uses Error Prone integration)");
 		TOOLING.put("jacoco-maven-plugin", "JaCoCo (the kit's gate)");
 		TOOLING.put("archunit", "ArchUnit (the kit's gate)");
 		TOOLING.put("pitest-maven", "PIT (advanced; a scoped profile, not a gate)");
@@ -268,6 +269,8 @@ public class Assess {
 			System.out.println("| " + g.name() + " (" + g.question() + ") | " + state.get(g.key()).label + " | " + finds.get(g.key()) + " | " + cost.get(g.key()) + " |");
 		}
 		System.out.println("| PIT, scoped (advanced: does the executing test check anything?) | " + (pit ? "profile present" : "absent") + " | not a gate; reads survivors in classes that changed | tens of minutes whole-module, about two scoped |");
+		System.out.println("| NullAway (can null cross a non-null contract?) | " + (found.containsKey("nullaway") ? "processor configured; scope needs proof" : "absent")
+				+ " | " + NullAwaySupport.summary(NullAwaySupport.packages(target, "")) + " | package-by-package adoption; `measure-nullaway --inventory`, then playbook 30 |");
 		System.out.println();
 		System.out.println("- Churn (main-source files touched most in the last 50 commits): " + (churn.isEmpty() ? "no git history read" : String.join(", ", churn)));
 		System.out.println();
@@ -343,6 +346,9 @@ public class Assess {
 			System.out.println();
 			System.out.println(scopedPit(target, modules));
 		}
+		System.out.println();
+		System.out.println("Optional NullAway adoption: `playbooks/30-nullaway.md`. It needs Error Prone's compiler integration, "
+				+ "not a completed cleanup of every Error Prone finding. Choose the package scope explicitly; it is outside the default GATE_ORDER.");
 		System.exit(0); // a timed-out PMD run may still be on a daemon thread
 	}
 
