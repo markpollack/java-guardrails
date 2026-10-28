@@ -374,7 +374,7 @@ public class Falsify {
 						: gate.equals("jacoco")
 								// the module's own tests under the agent, then the floor check; the other gates off so only this one answers
 								? List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true", "-Dspotbugs.skip=true", "-pl", mod, "verify")
-						: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", mod, gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
+						: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", mod, gate.equals("pmd") ? "pmd:check@pmd-gate" : "pmd:cpd-check");
 		System.out.println("falsify: " + String.join(" ", command));
 		return Util.run(command, target, line -> {
 			output.append(line).append('\n');

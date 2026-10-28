@@ -571,7 +571,7 @@ public class PmdMeasure {
 			b.append(".\n");
 			perModule.forEach((mod, n) -> b.append("    ").append(mod).append(": ").append(n).append(" PMD\n"));
 			b.append("  Options: (a) fix-all: every violation fixed in the code, one hotspot per commit\n");
-			b.append("           (b) ratchet: maxAllowedViolations at today's count per module, lowered as fixes land\n");
+			b.append("           (b) ratchet: pmd.maxAllowedViolations at today's count per module, lowered as fixes land; CPD stays at zero\n");
 			b.append("           (c) scope: gate the listed modules first, the rest later\n");
 			b.append("  Recommendation: ").append(total <= FIX_ALL_LIMIT ? "(a), the count is below " + FIX_ALL_LIMIT : "(b), the count is above " + FIX_ALL_LIMIT).append("\n");
 			// the recommended form first, so the line to record follows the recommendation
@@ -621,7 +621,7 @@ public class PmdMeasure {
 			System.out.println("None: every decision this measurement needs is recorded in " + target.relativize(Util.Decisions.path(target)) + ".");
 			if (d.has("PMD_MECHANISM") && d.get("PMD_MECHANISM").startsWith("ratchet")) {
 				System.out.println();
-				System.out.println("Ratchet values (maxAllowedViolations per module at today's count):");
+				System.out.println("Ratchet values (pmd.maxAllowedViolations per module at today's count; CPD stays at zero):");
 				Map<String, Long> perModule = new TreeMap<>();
 				for (Metric m : metrics) {
 					m.items().stream().filter(i -> i.value() >= m.reference()).forEach(i -> perModule.merge(i.module(), 1L, Long::sum));

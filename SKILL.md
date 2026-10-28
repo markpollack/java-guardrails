@@ -96,7 +96,7 @@ is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's ow
 
 - **Fix, never baseline.** A violation is fixed in the code. A false positive is excluded narrowly,
   in the ruleset, with a written reason; never a suppression comment in the code, never a baseline
-  file. The ratchet (`maxAllowedViolations`, coverage floors) is the only accepted alternative and
+  file. The ratchet (`pmd.maxAllowedViolations` scoped to PMD, coverage floors) is the only accepted alternative and
   only when the owner chose it.
 - **Falsify before commit.** A gate is committed only after `falsify` showed the planted violation
   reported by name. A gate that never failed may be checking nothing.

@@ -28,7 +28,7 @@ and any narrow, written exclusion.
      module, test libraries on the compile classpath, or most classes named like tests): leave
      them out of the gate, or gate them as published code.
    - `PMD_MECHANISM`: **fix-all** when the cost is under 100 items, **ratchet**
-     (`maxAllowedViolations` at today's count per module, lowered as fixes land; `measure`
+     (`pmd.maxAllowedViolations` at today's PMD count per module, lowered as fixes land; `measure`
      prints the values once the decision is recorded) above it, or **scope** to named modules.
    - `CLASS_SIZE`: a type that fails class NCSS for a reason other than tangled code, a wire
      schema or an interface carrying builders: exempt it by a written structural rule in the
@@ -39,8 +39,8 @@ and any narrow, written exclusion.
    The record exemption for canonical constructors is a kit constant since the SDK and needs no
    decision.
 3. **AI** — install the gate in report mode: copy `configs/pmd/ruleset.xml` to
-   `<target>/config/pmd/ruleset.xml`; add the three properties from `maven/properties.xml`
-   (`maven-pmd-plugin.version`, `pmd.version`, `cpd.minimumTokens`) and the plugin block from
+   `<target>/config/pmd/ruleset.xml`; add the four properties from `maven/properties.xml`
+   (`maven-pmd-plugin.version`, `pmd.version`, `cpd.minimumTokens`, `pmd.maxAllowedViolations`) and the plugin block from
    `maven/pmd.plugin.xml` to the root pom. Run `./mvnw pmd:pmd pmd:cpd` and confirm the per-module
    counts in `target/pmd.xml` and `target/cpd.xml` match step 1. Nothing fails yet: `pmd:check`
    is bound to `verify`, which this step does not run. Modules the owner left out get
@@ -54,7 +54,9 @@ and any narrow, written exclusion.
 5. **AI** — go green under the mechanism from step 2, one hotspot per commit with the full test
    suite green after each. Fix in the code; never a baseline file. An exclusion is an XPath or
    a named pattern in the ruleset with the reason beside it, never a suppression comment in the
-   code.
+   code. For a ratchet, override `<pmd.maxAllowedViolations>COUNT</pmd.maxAllowedViolations>`
+   in each module's `<properties>` with its measured PMD count. CPD still requires zero blocks
+   at the chosen token threshold; fix duplication or select a narrower module scope.
 6. **AI** — flip to fail: `./mvnw verify` is green with `failOnViolation` true (it already is in
    the slice). Commit with the measurement in the body: the counts from step 1, the mechanism,
    and the exclusions.
@@ -63,6 +65,16 @@ and any narrow, written exclusion.
    tooling) predicted each real finding, or that none did.
 
 ## Known shapes
+
+- **PMD and CPD share a Maven parameter.** Never put a positive `maxAllowedViolations` in
+  the plugin's common configuration: it also permits CPD duplicates. The slice binds separate
+  `pmd-gate` and `cpd-gate` executions; only `pmd-gate` reads `pmd.maxAllowedViolations`.
+  `./mvnw -pl MODULE pmd:check@pmd-gate` uses the module's ratchet, as does `verify`.
+  Plain `pmd:check` is strict zero. Both plain `pmd:cpd-check` and
+  `pmd:cpd-check@cpd-gate` are strict zero even when the PMD property is positive.
+  When upgrading an older copied slice, replace its combined execution with the two executions,
+  add the default PMD property, and remove old positive plugin-level allowances in parent and
+  child POMs. Convert those allowances to module properties, then falsify both gates again.
 
 - **Reactive code hides in lambdas.** NCSS and cognitive complexity do not see a lambda body as
   a method; the `LongLambda` rule in the ruleset does. On the SDK four of the seven long lambdas

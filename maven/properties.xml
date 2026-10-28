@@ -14,6 +14,8 @@
         <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>7.28.0</pmd.version>
         <cpd.minimumTokens>100</cpd.minimumTokens>
+        <!-- PMD-only ratchet, overridden per module; CPD always allows zero duplications. -->
+        <pmd.maxAllowedViolations>0</pmd.maxAllowedViolations>
         <!-- spotbugs-maven-plugin 4.10.x requires Maven 3.8.9+; with an older wrapper the
              4.9.8.x plugin runs the current SpotBugs engine below. -->
         <spotbugs-maven-plugin.version>4.9.8.5</spotbugs-maven-plugin.version>

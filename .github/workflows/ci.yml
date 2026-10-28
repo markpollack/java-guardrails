@@ -58,6 +58,8 @@ jobs:
         run: ./jbang tests/FalsifyInterruptTest.java .
       - name: Plant restoration preserves replacement files and refuses symbolic links
         run: ./jbang tests/PlantOwnershipTest.java .
+      - name: PMD ratchet never permits CPD duplication
+        run: ./jbang tests/PmdRatchetTest.java .
       - name: SKILL.md validates against the Agent Skills spec
         run: npx -y skills-ref validate .
       - name: Manifests are valid JSON and point at the root

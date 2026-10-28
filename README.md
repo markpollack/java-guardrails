@@ -110,7 +110,7 @@ gates. The agent then follows `playbooks/00-assess.md` and the playbook of the g
      Cost of going green in the measured modules: 57 PMD violations and 33 CPD blocks.
        mcp-core: 57 PMD
      Options: (a) fix-all: every violation fixed in the code, one hotspot per commit
-              (b) ratchet: maxAllowedViolations at today's count per module, lowered as fixes land
+              (b) ratchet: pmd.maxAllowedViolations at today's count per module, lowered as fixes land; CPD stays at zero
               (c) scope: gate the listed modules first, the rest later
      Recommendation: (a), the count is below 100
      Record as:  PMD_MECHANISM: fix-all
@@ -218,7 +218,8 @@ name the script: `<kit>/jbang <kit>/scripts/PmdMeasure.java <target>`. On Window
   proposed sparing the worst code. A threshold that does not fit is a stop, recorded as
   evidence either way; it is never moved to spare the worst code.
 - **Three ways to go green on existing code.** Fix all now, for small counts. Ratchet:
-  `maxAllowedViolations` or coverage floors at today's level, lowered as fixes land. Scope by
+  `pmd.maxAllowedViolations` or coverage floors at today's level, lowered as fixes land.
+  The PMD allowance applies only to its named execution; CPD stays at zero (see playbook 10). Scope by
   module: gate the core first.
 - **Exemptions are shapes, never names.** "A final class with no instance fields whose nested
   types are records, enums, interfaces and constants holders" exempts a protocol schema and

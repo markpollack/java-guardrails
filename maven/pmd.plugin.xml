@@ -1,6 +1,6 @@
 
             <!-- PMD size, complexity and duplication gate: pmd:check and pmd:cpd-check fail
-                 verify on any violation. Rules and thresholds, each with its reason, are in
+                 verify above the PMD allowance or on any CPD violation. Rules and thresholds are in
                  config/pmd/ruleset.xml; CPD's token threshold is cpd.minimumTokens above. Main
                  sources only. Fix a violation in the code: there is no baseline. -->
             <plugin>
@@ -28,6 +28,9 @@
                     <minimumTokens>${cpd.minimumTokens}</minimumTokens>
                     <printFailingErrors>true</printFailingErrors>
                     <failOnViolation>true</failOnViolation>
+                    <!-- Direct goals stay strict, including when pmd.maxAllowedViolations is set.
+                         The PMD allowance belongs only to the pmd-gate execution below. -->
+                    <maxAllowedViolations>0</maxAllowedViolations>
                     <linkXRef>false</linkXRef>
                 </configuration>
                 <executions>
@@ -36,8 +39,20 @@
                         <phase>verify</phase>
                         <goals>
                             <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <maxAllowedViolations>${pmd.maxAllowedViolations}</maxAllowedViolations>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>cpd-gate</id>
+                        <phase>verify</phase>
+                        <goals>
                             <goal>cpd-check</goal>
                         </goals>
+                        <configuration>
+                            <maxAllowedViolations>0</maxAllowedViolations>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

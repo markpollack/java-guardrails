@@ -54,7 +54,7 @@ does, so a Gradle slice can be added beside it.
 ## Hard rules
 
 - **Measure, then gate.** A threshold is set from the target's own distribution, at the knee. A default threshold is noise, and the first agent that meets it will exclude its way past it.
-- **Fix, never baseline.** A false positive is excluded narrowly with a written reason. A baseline file hides every violation forever; the ratchet (`maxAllowedViolations`, coverage floors) is the only accepted alternative.
+- **Fix, never baseline.** A false positive is excluded narrowly with a written reason. A baseline file hides every violation forever; the ratchet (`pmd.maxAllowedViolations` scoped to PMD, coverage floors) is the only accepted alternative.
 - **Falsify before commit.** A gate is committed only after a planted violation turned the build red. A gate that never failed may be checking nothing, as a misconfigured second SpotBugs execution once did.
 - **Java only.** No Python or shell in `scripts/`; Windows users and Java developers both lose otherwise. A dependency goes in a `//DEPS` line, never a checked-in jar beyond the wrapper's own.
 - **No SNAPSHOT in the catalog** and no fat or Boot-repackaged jar under a `//DEPS` coordinate; the shim would compile against nothing. `--help` and `--version` need no credentials.
