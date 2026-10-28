@@ -22,3 +22,8 @@ The regression challenges distinguish warning-only NullAway from warnings enforc
 build, exercise javac warnings, declaration opt-outs, same-line diagnostic columns, upstream
 reactor scope, colored/quiet output, a marker inside an annotation string, and process-group
 SIGINT on Linux. An excluded-package control catches a probe that incorrectly marks itself.
+
+The shared restoration helper also covers the other falsify gates. Run
+`./jbang tests/FalsifyInterruptTest.java .` for all seven gates under process-group SIGINT and
+JVM-only SIGTERM, source preservation and build shutdown. `./jbang tests/PlantOwnershipTest.java`
+checks atomic replacement of both existing and newly created files, and refusal of symbolic links.

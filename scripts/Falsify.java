@@ -2,6 +2,7 @@
 //JAVA 17+
 //SOURCES Util.java
 //SOURCES NullAwaySupport.java
+//SOURCES Plant.java
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,8 +12,9 @@ import java.util.stream.Stream;
 
 /**
  * Prove a gate is live by planting a violation in the target's main sources, running the build
- * step that should fail, and restoring the file byte for byte. Exit 0 means the gate caught the
- * plant (red as expected); exit 1 means the build stayed green, so the gate checks nothing.
+ * step that should fail, and restoring the file byte for byte, on Ctrl-C too ({@link Plant}). Exit 0
+ * means the gate caught the plant (red as expected); exit 1 means the build stayed green, so the
+ * gate checks nothing.
  *
  * Usage: {@code ./jbang falsify <target> <gate>} where gate is {@code pmd}, {@code cpd}, {@code errorprone}, {@code spotbugs}, {@code jacoco}, {@code archunit} or {@code nullaway}.
  */
@@ -39,14 +41,9 @@ public class Falsify {
 		System.out.println("falsify " + gate + ": planting in " + target.relativize(file) + " (module " + target.relativize(module) + ")");
 		int exit;
 		StringBuilder output = new StringBuilder();
-		try {
-			Files.write(file, plant(gate, new String(original, java.nio.charset.StandardCharsets.UTF_8))
-					.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		try (Plant planted = new Plant("falsify " + gate, target)) {
+			planted.replace(file, plant(gate, new String(original, java.nio.charset.StandardCharsets.UTF_8)));
 			exit = run(target, module, gate, output);
-		}
-		finally {
-			Files.write(file, original);
-			System.out.println("falsify " + gate + ": restored " + target.relativize(file));
 		}
 		// A brownfield module may be red already, so exit code alone proves nothing: the report must name the plant.
 		String evidence;
@@ -94,10 +91,10 @@ public class Falsify {
 				+ "  static String guardrailsPlantedViolation() { return null; }\n}\n";
 		StringBuilder output = new StringBuilder();
 		int exit;
-		try (var owned = new NullAwaySupport.Probe(probe)) {
+		try (Plant planted = new Plant("falsify nullaway", target)) {
 			// Change only the return expression between two compiles with identical gate flags.
 			// The valid control must pass: a pre-existing failure cannot prove this diagnostic fatal.
-			owned.create(source.replace("return null;", "return \"\";"));
+			planted.create(probe, source.replace("return null;", "return \"\";"));
 			StringBuilder control = new StringBuilder();
 			int controlExit = NullAwaySupport.compile(target, pkg.module().path(), false, control);
 			if (controlExit != 0) {
@@ -108,7 +105,7 @@ public class Falsify {
 						+ "Clear the existing build failure or explicitly select the intended checks before retrying.");
 				return 1;
 			}
-			owned.write(source);
+			planted.replace(probe, source);
 			System.out.println("falsify nullaway: planting in " + pkg.key());
 			exit = NullAwaySupport.compile(target, pkg.module().path(), false, output);
 		}
@@ -214,26 +211,20 @@ public class Falsify {
 		System.out.println("falsify archunit: planting " + target.relativize(a) + " <-> " + target.relativize(b) + " (module " + target.relativize(module) + ")");
 		int exit;
 		StringBuilder output = new StringBuilder();
-		try {
-			Files.writeString(a, "package " + pkgA + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedA {\n\tstatic Object other() {\n\t\treturn new " + pkgB + ".GuardrailsPlantedB();\n\t}\n}\n");
-			Files.writeString(b, "package " + pkgB + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedB {\n\tstatic Object other() {\n\t\treturn " + pkgA + ".GuardrailsPlantedA.class;\n\t}\n}\n");
+		try (Plant planted = new Plant("falsify archunit", target)) {
+			planted.create(a, "package " + pkgA + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedA {\n\tstatic Object other() {\n\t\treturn new " + pkgB + ".GuardrailsPlantedB();\n\t}\n}\n");
+			planted.create(b, "package " + pkgB + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedB {\n\tstatic Object other() {\n\t\treturn " + pkgA + ".GuardrailsPlantedA.class;\n\t}\n}\n");
 			List<String> command = List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true",
 					"-Dspotbugs.skip=true", "-Djacoco.skip=true", "-pl", target.relativize(module).toString(), "-Dtest=NoCyclesTest",
 					"-Dsurefire.failIfNoSpecifiedTests=false", "test");
 			System.out.println("falsify: " + String.join(" ", command));
-			Process p = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();
-			try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
-				String line;
-				while ((line = r.readLine()) != null) {
-					output.append(line).append('\n');
-				}
-			}
-			exit = p.waitFor();
+			exit = Util.run(command, target, line -> output.append(line).append('\n'));
 		}
-		finally {
-			Files.deleteIfExists(a);
-			Files.deleteIfExists(b);
-			System.out.println("falsify archunit: removed the two planted classes");
+		catch (java.nio.file.FileAlreadyExistsException e) {
+			System.out.println("falsify archunit: NOT PROVEN; " + e.getFile() + " already exists and was left untouched. "
+					+ "Inspect it before removing a verified leftover.");
+			System.exit(1);
+			return;
 		}
 		boolean named = output.toString().contains("Cycle detected") && output.toString().contains("GuardrailsPlanted");
 		if (exit == 0 || !named) {
@@ -385,17 +376,12 @@ public class Falsify {
 								? List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true", "-Dspotbugs.skip=true", "-pl", mod, "verify")
 						: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", mod, gate.equals("pmd") ? "pmd:check" : "pmd:cpd-check");
 		System.out.println("falsify: " + String.join(" ", command));
-		Process p = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();
-		try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = r.readLine()) != null) {
-				output.append(line).append('\n');
-				if (!line.startsWith("[INFO]")) {
-					System.out.println(line);
-				}
+		return Util.run(command, target, line -> {
+			output.append(line).append('\n');
+			if (!line.startsWith("[INFO]")) {
+				System.out.println(line);
 			}
-		}
-		return p.waitFor();
+		});
 	}
 
 	/**

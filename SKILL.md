@@ -124,8 +124,9 @@ is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's ow
 (`--quick` skips it) and no build, and says what is there, each gate's state, the gate order,
 the next gate from the recorded order, and the scoped PIT command when a profile exists. `measure` runs PMD's metrics engine in-process over every `src/main/java` below the target and
 needs no build. `falsify` plants in the first class of the first module, runs that module's check
-goal through the target's `mvnw`, restores the file byte for byte, and passes only if the build
-went red and the module's report names the plant.
+goal through the target's `mvnw`, restores the file byte for byte (on Ctrl-C or SIGTERM too, and
+never over an edit or replacement made meanwhile), and passes only if the build went red and the module's report
+names the plant.
 
 ## Where things are
 

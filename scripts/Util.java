@@ -268,6 +268,59 @@ final class Util {
 		}
 	}
 
+	/**
+	 * Runs a command in a directory to completion, handing each output line to the consumer. A JVM
+	 * shutdown (Ctrl-C, SIGTERM) stops the process and its children too, so no build outlives the
+	 * script that started it.
+	 */
+	static int run(List<String> command, Path directory, java.util.function.Consumer<String> line) throws IOException, InterruptedException {
+		Build build = new Build();
+		// registered before the start, so a Ctrl-C between the two cannot orphan the build
+		Thread stop = new Thread(build::stop, "guardrails-build-stop");
+		Runtime.getRuntime().addShutdownHook(stop);
+		try {
+			Process process = build.start(new ProcessBuilder(command).directory(directory.toFile()).redirectErrorStream(true));
+			try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+				String text;
+				while ((text = reader.readLine()) != null) {
+					line.accept(text);
+				}
+			}
+			return process.waitFor();
+		}
+		finally {
+			build.stop();
+			try {
+				Runtime.getRuntime().removeShutdownHook(stop);
+			}
+			catch (IllegalStateException e) {
+				// the JVM is shutting down and the hook is running or has run
+			}
+		}
+	}
+
+	/** A build process the shutdown hook can stop whether it runs before, during or after the start. */
+	private static final class Build {
+		private Process process;
+		private boolean stopped;
+
+		synchronized Process start(ProcessBuilder builder) throws IOException {
+			if (stopped) {
+				throw new IOException("interrupted; the build was not started");
+			}
+			process = builder.start();
+			return process;
+		}
+
+		synchronized void stop() {
+			stopped = true;
+			if (process != null) {
+				process.descendants().forEach(ProcessHandle::destroy);
+				process.destroy();
+			}
+		}
+	}
+
 	static void notYetImplemented(String alias) {
 		System.err.println("./jbang " + alias + ": not implemented yet; see playbooks/ for the procedure it will automate");
 		System.exit(2);

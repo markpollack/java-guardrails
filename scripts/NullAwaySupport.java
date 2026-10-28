@@ -1,10 +1,7 @@
 //JAVA 17+
 //SOURCES Util.java
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -94,86 +91,6 @@ final class NullAwaySupport {
 		return text.replaceAll("\\x1B\\[[0-?]*[ -/]*[@-~]", "");
 	}
 
-	/** Own the reserved file through normal completion and JVM shutdown, without deleting replacements. */
-	static final class Probe implements AutoCloseable {
-		private final Path path;
-		private final Thread shutdown;
-		private boolean created;
-		private boolean closed;
-		private Object fileKey;
-		private String expected;
-
-		Probe(Path path) {
-			this.path = path;
-			shutdown = new Thread(() -> {
-				try {
-					clean();
-				}
-				catch (IOException e) {
-					System.err.println("falsify nullaway: cleanup incomplete: " + e.getMessage());
-				}
-			}, "nullaway-probe-cleanup");
-			Runtime.getRuntime().addShutdownHook(shutdown);
-		}
-
-		synchronized void create(String source) throws IOException {
-			if (closed) {
-				throw new IOException("shutdown started before creating the probe");
-			}
-			Files.writeString(path, source, java.nio.file.StandardOpenOption.CREATE_NEW);
-			created = true;
-			fileKey = attributes().fileKey();
-			expected = source;
-		}
-
-		private java.nio.file.attribute.BasicFileAttributes attributes() throws IOException {
-			return Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes.class, java.nio.file.LinkOption.NOFOLLOW_LINKS);
-		}
-
-		private void verifyOwnership() throws IOException {
-			var current = attributes();
-			if (!current.isRegularFile() || !java.util.Objects.equals(fileKey, current.fileKey()) || !Files.readString(path).equals(expected)) {
-				throw new IOException("probe changed externally; leaving it untouched: " + path);
-			}
-		}
-
-		synchronized void write(String source) throws IOException {
-			if (closed) {
-				throw new IOException("shutdown started while writing the probe");
-			}
-			verifyOwnership();
-			Files.writeString(path, source, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
-			expected = source;
-		}
-
-		private synchronized void clean() throws IOException {
-			if (closed) {
-				return;
-			}
-			closed = true;
-			if (created && Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-				verifyOwnership();
-				Files.delete(path);
-				System.out.println("falsify nullaway: removed the planted class");
-			}
-		}
-
-		@Override
-		public void close() throws IOException {
-			try {
-				clean();
-			}
-			finally {
-				try {
-					Runtime.getRuntime().removeShutdownHook(shutdown);
-				}
-				catch (IllegalStateException e) {
-					// JVM shutdown is already running the hook.
-				}
-			}
-		}
-	}
-
 	static void requireProfile(Path target) throws IOException {
 		Path pom = target.resolve("pom.xml");
 		String xml = Files.isRegularFile(pom) ? Files.readString(pom).replaceAll("(?s)<!--.*?-->", "") : "";
@@ -195,32 +112,6 @@ final class NullAwaySupport {
 		}
 		command.addAll(List.of("clean", "compile"));
 		System.out.println("Running: " + String.join(" ", command));
-		Process process = new ProcessBuilder(command).directory(target.toFile()).redirectErrorStream(true).start();
-		Thread shutdown = new Thread(() -> {
-			process.descendants().forEach(ProcessHandle::destroy);
-			process.destroy();
-		}, "nullaway-maven-cleanup");
-		Runtime.getRuntime().addShutdownHook(shutdown);
-		try {
-			try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-				String line;
-				while ((line = reader.readLine()) != null) {
-					output.append(plainOutput(line)).append('\n');
-				}
-			}
-			return process.waitFor();
-		}
-		finally {
-			if (process.isAlive()) {
-				process.descendants().forEach(ProcessHandle::destroy);
-				process.destroy();
-			}
-			try {
-				Runtime.getRuntime().removeShutdownHook(shutdown);
-			}
-			catch (IllegalStateException e) {
-				// JVM shutdown is already running the hook.
-			}
-		}
+		return Util.run(command, target, line -> output.append(plainOutput(line)).append('\n'));
 	}
 }

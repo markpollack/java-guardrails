@@ -64,3 +64,15 @@ check enforced by `failOnWarning=true`, while rejecting pre-existing compiler fa
 The quiet-report case is refused rather than misreported as zero. Ordinary shutdown cleanup is
 tested on Linux; SIGKILL, JVM crashes, Windows and newer Maven/compiler output formats remain
 outside this evidence.
+
+## Shared falsify restoration, 2026-10-28
+
+The owned-plant helper is shared by all seven falsifiers. A Linux stand-in build that remains
+active until signalled verifies restoration and build termination for each gate, both process-group
+SIGINT and JVM-only SIGTERM. Separate ownership checks preserve atomically replaced files even
+when their bytes still match the plant, and reject symbolic-link sources before modifying them.
+These checks were observed failing on the earlier implementation before the fixes passed.
+
+All seven falsifiers also caught real planted violations on the isolated MCP SDK trial, with
+source hashes identical before and after each invocation. This checks ordinary Maven execution
+separately from signal behavior. It does not establish cleanup after SIGKILL, crashes, or on Windows.
