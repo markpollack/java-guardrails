@@ -57,7 +57,7 @@ public class JacocoMeasure {
 			System.exit(2);
 		}
 		Util.Decisions decisions = Util.Decisions.read(target);
-		List<Util.Module> modules = Util.modules(target);
+		List<Util.Module> modules = Util.modules(target, Util.mavenProfile("jacoco"));
 		Set<String> excluded = decisions.excludedModules().stream().collect(Collectors.toSet());
 		List<Util.Module> gated = new ArrayList<>();
 		for (Util.Module m : modules) {
@@ -72,6 +72,10 @@ public class JacocoMeasure {
 		System.out.println("Target `" + target + "`, JaCoCo 0.8.15, each module's own classes exercised by its own tests; modules the owner left out skip.");
 		decisions.print();
 
+		if (gated.isEmpty()) {
+			System.out.println("No selected modules with executable sources; nothing measured.");
+			return;
+		}
 		String pl = gated.stream().map(Util.Module::path).collect(Collectors.joining(","));
 		String[] argLine = surefireArgLine(target);
 		String argLineProperty = argLine[0];
@@ -83,19 +87,15 @@ public class JacocoMeasure {
 			System.out.println("The surefire `<argLine>` reads `@{" + argLineProperty + "}`, not JaCoCo's default `argLine`; the agent is written into that property (`jacoco.propertyName`). The plugin slice needs the same `<propertyName>`.");
 			System.out.println();
 		}
-		List<String> command = List.of(Util.mvnw(target), "-B", "-q", "-Dspring-javaformat.skip=true", "-P", "!errorprone",
-				"-Djacoco.propertyName=" + argLineProperty, "-pl", pl, JACOCO + ":prepare-agent", "test", JACOCO + ":report");
+		List<String> command = Util.maven(target, "jacoco", pl);
+		command.addAll(List.of("-q", "-Djacoco.propertyName=" + argLineProperty, "clean", JACOCO + ":prepare-agent", "test", JACOCO + ":report"));
 		System.out.println("Running: " + String.join(" ", command));
 		System.out.println();
 		StringBuilder out = new StringBuilder();
 		int exit = run(target, command, out);
 		if (exit != 0) {
-			System.out.println("The test run failed (exit " + exit + "); coverage is not measured on a red test suite:");
-			for (String line : out.toString().split("\n")) {
-				if (line.contains("Tests run:") && (line.contains("Failures: ") && !line.contains("Failures: 0,") || line.contains("Errors: ") && !line.contains("Errors: 0,"))) {
-					System.out.println("    " + line.trim());
-				}
-			}
+			System.out.println("The Maven build failed (exit " + exit + "); coverage is unavailable. The build may have failed before tests:");
+			System.out.print(out);
 			System.exit(1);
 		}
 

@@ -5,7 +5,7 @@ license: Business Source License 1.1; see LICENSE
 compatibility: Requires a JDK 17 or newer and a Maven project with the Maven wrapper. The bundled JBang wrapper resolves everything else on first run. Gradle is not yet supported.
 metadata:
   author: markpollack
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # java-guardrails
@@ -88,9 +88,16 @@ the data, and the exact line to record. The kind is the second line of every blo
   A changed answer is an edit to that file.
 
 The decisions file is the kit's memory in the target. Keys the kit reads: `GATE_ORDER`,
-`TEST_SUPPORT_MODULES`, `PMD_MECHANISM`, `CLASS_SIZE`, `THRESHOLD_FIT_<METRIC>`,
+`TEST_SUPPORT_MODULES`, `EXCLUDED_MODULES`, `PMD_MECHANISM`, `CLASS_SIZE`, `THRESHOLD_FIT_<METRIC>`,
 `ERRORPRONE_DISABLED`, `SPOTBUGS_MECHANISM`, `JACOCO_FLOORS`, `ARCHUNIT_CYCLES`. Any other key
 is kept and ignored; `PROJECT_*` is never claimed by the kit, so the target's own notes go there.
+
+`EXCLUDED_MODULES: module-a, tools/module-b` excludes general module paths (and their
+children) from measurement and plant selection; `none` clears this list. It does not answer
+`TEST_SUPPORT_MODULES`. Existing `TEST_SUPPORT_MODULES: exclude ...` entries still exclude
+those paths; an entry that excludes only non-test modules no longer suppresses the test-support
+stop. Move general exclusions to `EXCLUDED_MODULES` when convenient, then answer the emitted
+stop for test-support modules. `TEST_SUPPORT_MODULES: gate` remains a complete answer.
 
 ## Rules that are not negotiable
 

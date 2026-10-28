@@ -79,7 +79,7 @@ public class ErrorProneMeasure {
 			System.exit(2);
 		}
 		Util.Decisions decisions = Util.Decisions.read(target);
-		List<Util.Module> modules = Util.modules(target);
+		List<Util.Module> modules = Util.modules(target, Util.mavenProfile("errorprone"));
 		Set<String> excluded = decisions.excludedModules().stream().collect(Collectors.toSet());
 		Set<String> disabled = disabledChecks(decisions);
 
@@ -88,14 +88,16 @@ public class ErrorProneMeasure {
 		System.out.println("Target `" + target + "`, Error Prone 2.50.0, the kit's profile in report mode, main sources only.");
 		decisions.print();
 
-		List<String> command = List.of(Util.mvnw(target), "-B", "-P", "errorprone", "-Dspring-javaformat.skip=true",
-				"-Derrorprone.failOnWarning=false", "-Derrorprone.extraArgs=-XepAllErrorsAsWarnings", "clean", "compile");
+		List<String> command = Util.maven(target, "errorprone", "");
+		command.addAll(List.of("-Derrorprone.failOnWarning=false", "-Derrorprone.extraArgs=-XepAllErrorsAsWarnings", "clean", "compile"));
 		System.out.println("Running: " + String.join(" ", command));
 		System.out.println();
 		List<Finding> findings = new ArrayList<>();
 		String[] currentModule = { "?" };
 		Pattern building = Pattern.compile("^\\[INFO\\] Building (.*) \\S+( +\\[\\d+/\\d+\\])?$");
+		StringBuilder buildOutput = new StringBuilder();
 		int exit = run(target, command, line -> {
+			buildOutput.append(line).append('\n');
 			Matcher m = DIAGNOSTIC.matcher(line);
 			if (m.matches()) {
 				Path file = Path.of(m.group(1));
@@ -116,6 +118,7 @@ public class ErrorProneMeasure {
 			}
 		});
 		if (exit != 0) {
+			System.err.print(buildOutput);
 			System.err.println("measure-errorprone: the report-mode compile failed (exit " + exit + "); the findings above are partial. Fix the build first.");
 			System.exit(1);
 		}

@@ -539,7 +539,7 @@ public class PmdMeasure {
 		List<String> blocks = new ArrayList<>();
 
 		List<Util.Module> testSupport = all.stream().filter(m -> !m.testSupportReasons().isEmpty()).collect(Collectors.toList());
-		if (!testSupport.isEmpty() && !d.has("TEST_SUPPORT_MODULES")) {
+		if (!testSupport.isEmpty() && !d.testSupportDecided(testSupport)) {
 			StringBuilder b = new StringBuilder(Util.stopHeader("TEST_SUPPORT_MODULES", true)).append("\n").append(Util.kindLine(true));
 			b.append("  These modules keep test code in src/main/java, so the gate would make the agent refactor tests:\n");
 			for (Util.Module m : testSupport) {
@@ -565,7 +565,7 @@ public class PmdMeasure {
 			long cpd = cpdBlocks.stream().filter(i -> i.value() >= 100).count();
 			StringBuilder b = new StringBuilder(Util.stopHeader("PMD_MECHANISM", true)).append("\n").append(Util.kindLine(true));
 			b.append("  Cost of going green in the measured modules: ").append(total).append(" PMD violations and ").append(cpd).append(" CPD blocks");
-			if (!testSupport.isEmpty() && !d.has("TEST_SUPPORT_MODULES")) {
+			if (!testSupport.isEmpty() && !d.testSupportDecided(testSupport)) {
 				b.append(" (counts change if TEST_SUPPORT_MODULES excludes modules; answer that first)");
 			}
 			b.append(".\n");

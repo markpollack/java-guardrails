@@ -11,6 +11,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 /** Shared by every script through {@code //SOURCES Util.java}. */
 final class Util {
@@ -21,6 +24,29 @@ final class Util {
 	static String mvnw(Path target) {
 		boolean windows = System.getProperty("os.name").startsWith("Windows");
 		return target.resolve(windows ? "mvnw.cmd" : "mvnw").toString();
+	}
+
+	/** The kit's compiler checkers share one opt-in profile; other gates must not activate them. */
+	static String mavenProfile(String gate) {
+		return gate.equals("errorprone") || gate.equals("nullaway") ? "errorprone" : "!errorprone";
+	}
+
+	/**
+	 * Shared build policy for measurements and proofs. Build selected modules with their working-tree
+	 * dependencies, isolate the requested checker from other kit gates, and never override that
+	 * checker's own skip/disable setting: a disabled gate must fail its negative control.
+	 */
+	static List<String> maven(Path target, String gate, String selected) {
+		if (!List.of("pmd", "cpd", "spotbugs", "jacoco", "archunit", "errorprone", "nullaway").contains(gate)) {
+			throw new IllegalArgumentException("Unknown Maven gate: " + gate);
+		}
+		List<String> command = new ArrayList<>(List.of(mvnw(target), "-B", "-Dstyle.color=never",
+				"-Dspring-javaformat.skip=true", "-P", mavenProfile(gate)));
+		for (String other : List.of("pmd", "cpd", "spotbugs", "jacoco")) {
+			if (!other.equals(gate)) command.add("-D" + other + ".skip=true");
+		}
+		if (!selected.isEmpty()) command.addAll(List.of("-pl", selected, "-am"));
+		return command;
 	}
 
 	/** The target project directory: the first argument, else the working directory. */
@@ -69,16 +95,28 @@ final class Util {
 	static final Pattern TEST_MODULE_NAME = Pattern.compile("(^|[-_/])(test|tests|testing|test-support|testkit|tck|conformance)([-_/]|$)");
 
 	/**
-	 * Every module below the target that has a src/main/java, with the reasons it looks like test
+	 * Every declared Maven module (filesystem source inventory for other build tools), with the reasons it looks like test
 	 * support: its name, test libraries on its compile classpath, or most of its classes named
 	 * like tests. Build output and vendored trees are skipped.
 	 */
 	static List<Module> modules(Path target) throws IOException {
+		return modules(target, "");
+	}
+
+	static List<Module> modules(Path target, String profile) throws IOException {
+		target = target.toAbsolutePath().normalize();
+		if (Files.isRegularFile(target.resolve("pom.xml"))) {
+			List<Module> result = new ArrayList<>();
+			try { mavenModules(target, target, new HashSet<>(), result); }
+			catch (EffectiveModelNeeded e) { result = effectiveModules(target, profile); }
+			return result.stream().sorted(java.util.Comparator.comparing(Module::path)).toList();
+		}
+		final Path base = target;
 		List<Path> roots;
 		try (Stream<Path> walk = Files.walk(target)) {
 			roots = walk.filter(Files::isDirectory)
 					.filter(p -> p.endsWith(Path.of("src", "main", "java")))
-					.filter(p -> !isBuildOutput(target.relativize(p)))
+					.filter(p -> !isBuildOutput(base.relativize(p)))
 					.sorted().collect(Collectors.toList());
 		}
 		List<Module> modules = new ArrayList<>();
@@ -88,6 +126,86 @@ final class Util {
 			modules.add(new Module(path, moduleDir, root, testSupportReasons(path, moduleDir, root)));
 		}
 		return modules;
+	}
+
+	/** Follow aggregator edges, never arbitrary nested POMs. Profiles need Maven's effective model. */
+	private static void mavenModules(Path target, Path dir, Set<Path> seen, List<Module> modules) throws IOException {
+		if (!seen.add(dir.toRealPath())) return;
+		Element project = pom(dir.resolve("pom.xml"));
+		Element profiles = child(project, "profiles");
+		if (profiles != null && profiles.getElementsByTagName("modules").getLength() > 0) {
+			throw new EffectiveModelNeeded();
+		}
+		Path source = dir.resolve("src/main/java");
+		if (Files.isDirectory(source)) {
+			String path = target.equals(dir) ? "." : target.relativize(dir).toString().replace('\\', '/');
+			modules.add(new Module(path, dir, source, testSupportReasons(path, dir, source)));
+		}
+		Element declared = child(project, "modules");
+		if (declared == null) return;
+		for (Node n = declared.getFirstChild(); n != null; n = n.getNextSibling()) {
+			if (!(n instanceof Element module) || !module.getTagName().equals("module")) continue;
+			String name = module.getTextContent().trim();
+			if (name.contains("${")) throw new EffectiveModelNeeded();
+			Path next = dir.resolve(name).normalize();
+			if (Files.isRegularFile(next)) next = next.getParent();
+			if (!next.startsWith(target)) throw new IOException("Maven module is outside the target: " + next);
+			mavenModules(target, next, seen, modules);
+		}
+	}
+
+	private static final class EffectiveModelNeeded extends IOException {}
+
+	/** Maven resolves profile activation and interpolation; ordinary reactors retain the cheap inventory. */
+	private static List<Module> effectiveModules(Path target, String profile) throws IOException {
+		Path effective = Files.createTempFile("guardrails-effective-pom-", ".xml");
+		try {
+			List<String> command = new ArrayList<>(List.of(mvnw(target), "-B", "-q"));
+			if (!profile.isEmpty()) command.addAll(List.of("-P", profile));
+			command.addAll(List.of("org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom", "-Doutput=" + effective));
+			StringBuilder output = new StringBuilder();
+			int exit = run(command, target, line -> output.append(line).append('\n'));
+			if (exit != 0) throw new IOException("Maven reactor discovery failed (exit " + exit + "):\n" + output);
+			Element model = pom(effective);
+			List<Element> projects = new ArrayList<>();
+			if (model.getTagName().equals("project")) projects.add(model);
+			else for (Node n = model.getFirstChild(); n != null; n = n.getNextSibling()) {
+				if (n instanceof Element e && e.getTagName().equals("project")) projects.add(e);
+			}
+			List<Module> result = new ArrayList<>();
+			for (Element project : projects) {
+				Element build = child(project, "build");
+				Element sourceDirectory = build == null ? null : child(build, "sourceDirectory");
+				if (sourceDirectory == null) continue;
+				Path source = Path.of(sourceDirectory.getTextContent().trim()).normalize();
+				if (!Files.isDirectory(source)) continue;
+				if (!source.startsWith(target) || !source.endsWith(Path.of("src", "main", "java"))) {
+					throw new IOException("Reactor inventory requires src/main/java inside the target: " + source);
+				}
+				Path dir = source.getParent().getParent().getParent();
+				String path = target.equals(dir) ? "." : target.relativize(dir).toString().replace('\\', '/');
+				result.add(new Module(path, dir, source, testSupportReasons(path, dir, source)));
+			}
+			return result;
+		}
+		catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IOException("Maven reactor discovery interrupted", e); }
+		finally { Files.deleteIfExists(effective); }
+	}
+
+	private static Element pom(Path file) throws IOException {
+		try {
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+			return factory.newDocumentBuilder().parse(file.toFile()).getDocumentElement();
+		}
+		catch (Exception e) { throw new IOException("Cannot read Maven project " + file + ": " + e.getMessage(), e); }
+	}
+
+	private static Element child(Element parent, String name) {
+		for (Node n = parent.getFirstChild(); n != null; n = n.getNextSibling()) {
+			if (n instanceof Element e && e.getTagName().equals(name)) return e;
+		}
+		return null;
 	}
 
 	/** Whether a relative path passes through build output or a vendored tree, on any operating system. */
@@ -192,11 +310,27 @@ final class Util {
 		}
 
 		List<String> excludedModules() {
+			List<String> result = new ArrayList<>(commaList(get("EXCLUDED_MODULES")));
+			result.addAll(legacyExcludedModules());
+			return result.stream().distinct().toList();
+		}
+
+		private List<String> legacyExcludedModules() {
 			String v = get("TEST_SUPPORT_MODULES");
-			if (!v.startsWith("exclude")) {
+			if (!v.startsWith("exclude ")) {
 				return List.of();
 			}
-			return Stream.of(v.substring("exclude".length()).split(",")).map(String::trim).filter(x -> !x.isEmpty()).collect(Collectors.toList());
+			return commaList(v.substring("exclude".length()));
+		}
+
+		private List<String> commaList(String value) {
+			return Stream.of(value.split(",")).map(String::trim).filter(x -> !x.isEmpty() && !x.equals("none")).toList();
+		}
+
+		/** Legacy exclusions still apply, but excluding an unrelated tool never answers this question. */
+		boolean testSupportDecided(List<Module> support) {
+			return get("TEST_SUPPORT_MODULES").equals("gate") || support.stream().anyMatch(m ->
+					legacyExcludedModules().stream().anyMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/")));
 		}
 
 		Set<String> classSizeExempt() {

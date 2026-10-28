@@ -38,7 +38,7 @@ final class NullAwaySupport {
 		List<PackageScope> result = new ArrayList<>();
 		List<String> excluded = Util.Decisions.read(target).excludedModules();
 		boolean moduleFound = selectedModule.isEmpty();
-		for (Util.Module module : Util.modules(target)) {
+		for (Util.Module module : Util.modules(target, Util.mavenProfile("nullaway"))) {
 			if (!selectedModule.isEmpty() && !module.path().equals(selectedModule)) {
 				continue;
 			}
@@ -101,14 +101,10 @@ final class NullAwaySupport {
 	}
 
 	static int compile(Path target, String module, boolean report, StringBuilder output) throws IOException, InterruptedException {
-		List<String> command = new ArrayList<>(List.of(Util.mvnw(target), "-B", "-Dstyle.color=never", "-P", "errorprone",
-				"-Dspring-javaformat.skip=true"));
+		List<String> command = Util.maven(target, "nullaway", module);
 		if (report) {
 			command.add("-Derrorprone.failOnWarning=false");
 			command.add("-Derrorprone.extraArgs=-XepAllErrorsAsWarnings");
-		}
-		if (!module.isEmpty()) {
-			command.addAll(List.of("-pl", module, "-am"));
 		}
 		command.addAll(List.of("clean", "compile"));
 		System.out.println("Running: " + String.join(" ", command));

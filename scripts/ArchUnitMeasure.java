@@ -63,7 +63,7 @@ public class ArchUnitMeasure {
 			System.exit(2);
 		}
 		Util.Decisions decisions = Util.Decisions.read(target);
-		List<Util.Module> modules = Util.modules(target);
+		List<Util.Module> modules = Util.modules(target, Util.mavenProfile("archunit"));
 		Set<String> excluded = decisions.excludedModules().stream().collect(Collectors.toSet());
 		List<Util.Module> gated = new ArrayList<>();
 		for (Util.Module m : modules) {
@@ -78,8 +78,13 @@ public class ArchUnitMeasure {
 		System.out.println("Target `" + target + "`, ArchUnit 1.4.1 over each gated module's compiled main classes; modules the owner left out skip.");
 		decisions.print();
 
+		if (gated.isEmpty()) {
+			System.out.println("No selected modules with executable sources; nothing measured.");
+			return;
+		}
 		String pl = gated.stream().map(Util.Module::path).collect(Collectors.joining(","));
-		List<String> compile = List.of(Util.mvnw(target), "-B", "-q", "-Dspring-javaformat.skip=true", "-DskipTests", "-P", "!errorprone", "-pl", pl, "compile");
+		List<String> compile = Util.maven(target, "archunit", pl);
+		compile.addAll(List.of("-q", "-DskipTests", "clean", "compile"));
 		System.out.println("Compiling: " + String.join(" ", compile));
 		System.out.println();
 		Process p = new ProcessBuilder(compile).directory(target.toFile()).inheritIO().start();

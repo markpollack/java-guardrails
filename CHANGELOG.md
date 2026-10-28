@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 — Unreleased
+
+- Build scoped Maven commands with working-tree reactor dependencies, including a compile before source-check goals that resolve sibling artifacts.
+- Use one shared Maven policy to isolate each requested checker; compiler checkers are active only for Error Prone and NullAway. A target's disabled gate stays disabled so falsification can reject it.
+- Discover Maven source modules through aggregator declarations; ask Maven for the effective reactor when profiles or interpolated module paths require it. Standalone nested projects stay outside the reactor scope.
+- Add `EXCLUDED_MODULES` independently of the test-support decision, retaining legacy exclusions without letting unrelated exclusions suppress that decision.
+- Show Maven failure output when a measurement fails before tests; handle empty selections without running the reactor.
+
 ## 0.3.0 — 2026-10-28
 
 - NullAway package inventory, report-mode measurement, planted-violation proof and adoption playbook.

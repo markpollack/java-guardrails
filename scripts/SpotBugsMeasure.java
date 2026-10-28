@@ -71,7 +71,7 @@ public class SpotBugsMeasure {
 		Files.writeString(includeAll, INCLUDE_ALL);
 		includeAll.toFile().deleteOnExit();
 		Util.Decisions decisions = Util.Decisions.read(target);
-		List<Util.Module> modules = Util.modules(target);
+		List<Util.Module> modules = Util.modules(target, Util.mavenProfile("spotbugs"));
 		Set<String> excluded = decisions.excludedModules().stream().collect(Collectors.toSet());
 		List<Util.Module> gated = modules.stream().filter(m -> excluded.stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/"))).collect(Collectors.toList());
 
@@ -148,22 +148,19 @@ public class SpotBugsMeasure {
 
 	/** Runs compile + spotbugs:spotbugs with the given include filter (null: the gate's) and reads every gated module's report. */
 	static List<Finding> analyse(Path target, List<Util.Module> gated, Path includeFilter, String label) throws Exception {
-		List<String> command = new ArrayList<>(List.of(Util.mvnw(target), "-B", "-q", "-Dspring-javaformat.skip=true", "-DskipTests", "-P", "!errorprone"));
+		List<String> command = Util.maven(target, "spotbugs", "");
+		command.addAll(List.of("-q", "-DskipTests"));
 		if (includeFilter != null) {
 			command.add("-Dspotbugs.includeFilterFile=" + includeFilter);
 		}
-		command.addAll(List.of("compile", "spotbugs:spotbugs"));
+		command.addAll(List.of("clean", "compile", "spotbugs:spotbugs"));
 		System.out.println("Running (" + label + "): " + String.join(" ", command));
 		StringBuilder out = new StringBuilder();
 		int exit = run(target, command, out);
 		if (exit != 0) {
 			System.out.println();
 			System.out.println("The analysis failed (exit " + exit + "):");
-			for (String line : out.toString().split("\n")) {
-				if (line.startsWith("[ERROR]") && !line.contains("Help 1") && !line.contains("re-run") && !line.isBlank()) {
-					System.out.println("    " + line);
-				}
-			}
+			System.out.print(out);
 			System.out.println("A module with no classes to analyse (an aggregator, a module-info only) sets `<spotbugs.skip>true</spotbugs.skip>` in its own pom.");
 			System.exit(1);
 		}

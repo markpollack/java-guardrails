@@ -35,7 +35,7 @@ public class Falsify {
 			falsifyArchUnit(target);
 			return;
 		}
-		Path file = firstClassFile(target);
+		Path file = firstClassFile(target, gate);
 		Path module = moduleOf(target, file);
 		byte[] original = Files.readAllBytes(file);
 		System.out.println("falsify " + gate + ": planting in " + target.relativize(file) + " (module " + target.relativize(module) + ")");
@@ -182,8 +182,10 @@ public class Falsify {
 	static void falsifyArchUnit(Path target) throws Exception {
 		// the first gated module that has the test installed; planting where there is no NoCyclesTest proves nothing
 		Path module = null;
+		List<Path> eligible = eligibleModules(target, "archunit");
 		try (Stream<Path> walk = Files.walk(target)) {
 			List<Path> tests = walk.filter(p -> p.getFileName().toString().equals("NoCyclesTest.java") && p.toString().contains("/src/test/java/"))
+					.filter(p -> eligible.contains(moduleOf(target, p)))
 					.filter(p -> !gateSkipped(target, moduleOf(target, p))).sorted().collect(java.util.stream.Collectors.toList());
 			if (!tests.isEmpty()) {
 				module = moduleOf(target, tests.get(0));
@@ -214,9 +216,8 @@ public class Falsify {
 		try (Plant planted = new Plant("falsify archunit", target)) {
 			planted.create(a, "package " + pkgA + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedA {\n\tstatic Object other() {\n\t\treturn new " + pkgB + ".GuardrailsPlantedB();\n\t}\n}\n");
 			planted.create(b, "package " + pkgB + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedB {\n\tstatic Object other() {\n\t\treturn " + pkgA + ".GuardrailsPlantedA.class;\n\t}\n}\n");
-			List<String> command = List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true",
-					"-Dspotbugs.skip=true", "-Djacoco.skip=true", "-pl", target.relativize(module).toString(), "-Dtest=NoCyclesTest",
-					"-Dsurefire.failIfNoSpecifiedTests=false", "test");
+			List<String> command = Util.maven(target, "archunit", target.equals(module) ? "." : target.relativize(module).toString());
+			command.addAll(List.of("-Dtest=NoCyclesTest", "-Dsurefire.failIfNoSpecifiedTests=false", "clean", "test"));
 			System.out.println("falsify: " + String.join(" ", command));
 			exit = Util.run(command, target, line -> output.append(line).append('\n'));
 		}
@@ -228,6 +229,7 @@ public class Falsify {
 		}
 		boolean named = output.toString().contains("Cycle detected") && output.toString().contains("GuardrailsPlanted");
 		if (exit == 0 || !named) {
+			System.out.print(output);
 			System.out.println("falsify archunit: FAILED; build exit " + exit + ", planted cycle " + (named ? "reported" : "not reported")
 					+ (output.toString().contains("No tests were executed") || !output.toString().contains("NoCyclesTest") ? "; is NoCyclesTest installed in the module?" : "") + "; the gate checks nothing");
 			System.exit(1);
@@ -365,16 +367,16 @@ public class Falsify {
 
 	/** Runs the gate's check for the module, echoing and collecting its output. */
 	static int run(Path target, Path module, String gate, StringBuilder output) throws IOException, InterruptedException {
-		String mod = target.relativize(module).toString();
-		List<String> command = gate.equals("errorprone")
-				? List.of(Util.mvnw(target), "-B", "-P", "errorprone", "-Dspring-javaformat.skip=true", "-pl", mod, "compile")
-				: gate.equals("spotbugs")
-						// Error Prone off so that the plant reaches SpotBugs; the class must be compiled first
-						? List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-DskipTests", "-P", "!errorprone", "-pl", mod, "compile", "spotbugs:check")
-						: gate.equals("jacoco")
-								// the module's own tests under the agent, then the floor check; the other gates off so only this one answers
-								? List.of(Util.mvnw(target), "-B", "-Dspring-javaformat.skip=true", "-P", "!errorprone", "-Dpmd.skip=true", "-Dcpd.skip=true", "-Dspotbugs.skip=true", "-pl", mod, "verify")
-						: List.of(Util.mvnw(target), "-q", "-B", "-Dspring-javaformat.skip=true", "-pl", mod, gate.equals("pmd") ? "pmd:check@pmd-gate" : "pmd:cpd-check");
+		String mod = target.equals(module) ? "." : target.relativize(module).toString();
+		List<String> command = Util.maven(target, gate, mod);
+		command.add("clean");
+		if (gate.equals("jacoco")) command.add("verify");
+		else {
+			command.addAll(List.of("-DskipTests", "compile"));
+			if (gate.equals("spotbugs")) command.add("spotbugs:check");
+			if (gate.equals("pmd")) command.add("pmd:check@pmd-gate");
+			if (gate.equals("cpd")) command.add("pmd:cpd-check");
+		}
 		System.out.println("falsify: " + String.join(" ", command));
 		return Util.run(command, target, line -> {
 			output.append(line).append('\n');
@@ -389,10 +391,12 @@ public class Falsify {
 	 * the gate runs on: a module whose pom sets pmd.skip or cpd.skip (the owner left it out) is
 	 * passed over, because planting there proves nothing.
 	 */
-	static Path firstClassFile(Path target) throws IOException {
+	static Path firstClassFile(Path target, String gate) throws IOException {
+		List<Path> eligible = eligibleModules(target, gate);
 		try (Stream<Path> walk = Files.walk(target)) {
 			return walk.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".java"))
 					.filter(p -> p.toString().contains("/src/main/java/") && !p.toString().contains("/target/"))
+					.filter(p -> eligible.contains(moduleOf(target, p)))
 					.filter(p -> !gateSkipped(target, moduleOf(target, p)))
 					.filter(p -> !p.getFileName().toString().equals("package-info.java")
 							&& !p.getFileName().toString().equals("module-info.java"))
@@ -407,6 +411,13 @@ public class Falsify {
 					.sorted().findFirst()
 					.orElseThrow(() -> new IllegalStateException("no class under src/main/java below " + target));
 		}
+	}
+
+	static List<Path> eligibleModules(Path target, String gate) throws IOException {
+		List<String> excluded = Util.Decisions.read(target).excludedModules();
+		return Util.modules(target, Util.mavenProfile(gate)).stream()
+				.filter(m -> excluded.stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/")))
+				.map(Util.Module::dir).toList();
 	}
 
 	/** Whether the module, or a parent pom between it and the target, skips the PMD or CPD goals. */

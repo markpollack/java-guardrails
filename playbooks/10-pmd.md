@@ -26,7 +26,10 @@ and any narrow, written exclusion.
    for:
    - `TEST_SUPPORT_MODULES`: modules that keep test code in `src/main/java` (named like a test
      module, test libraries on the compile classpath, or most classes named like tests): leave
-     them out of the gate, or gate them as published code.
+     them out of the gate, or gate them as published code. General exclusions belong in
+     `EXCLUDED_MODULES: path, other/path`; they do not answer this decision. Legacy
+     `TEST_SUPPORT_MODULES: exclude ...` paths continue to apply, but excluding only an
+     unrelated tool no longer hides this stop.
    - `PMD_MECHANISM`: **fix-all** when the cost is under 100 items, **ratchet**
      (`pmd.maxAllowedViolations` at today's PMD count per module, lowered as fixes land; `measure`
      prints the values once the decision is recorded) above it, or **scope** to named modules.

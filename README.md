@@ -271,3 +271,27 @@ Issues and discussion: <https://github.com/markpollack/java-guardrails/issues>.
 ## Licence
 
 Business Source License 1.1; see `LICENSE`.
+
+### Maven reactor scope
+
+Run the kit against the reactor root. Maven inventory follows that POM's `<modules>` recursively,
+so a standalone project nested under `tools/` is not selected unless an aggregator declares it.
+Profile-defined or interpolated module lists use Maven's effective model through the target's
+wrapper and settings. Inventory expects the conventional `src/main/java` layout inside the target.
+
+Scoped builds use `-pl ... -am` and a clean lifecycle, compiling sibling dependencies from the
+working tree without a prerequisite `install` into the shared local repository. Excluded modules
+can still be built as dependencies; their tests and the requested gate can run as upstream
+prerequisites. An upstream failure makes measurement or proof fail and retains Maven's diagnostics.
+External dependencies and parents still resolve through the target's Maven settings.
+
+All Maven-backed scripts share a checker policy: Error Prone and NullAway enable the `errorprone`
+profile; other gates explicitly disable it. Unrelated kit gates are skipped during that command.
+The requested gate's own skip setting is preserved, so disabling it cannot produce a successful
+falsification. This policy controls the kit's profiles and plugin properties; other target build
+extensions still run normally, and their failures are shown rather than counted as proof.
+
+Use `EXCLUDED_MODULES: path, other/path` in `config/guardrails/decisions.md` for general exclusions.
+Old `TEST_SUPPORT_MODULES: exclude ...` entries keep excluding their paths. Only an actual test-support
+answer suppresses PMD's test-support stop; an old exclusion of a standalone tool no longer does.
+Updating the kit does not rewrite a target's decisions or copied Maven configuration.
