@@ -55,8 +55,8 @@ Maven wrapper, and a coding agent that reads Agent Skills (Claude Code, or any o
    ```
 
    If the first command answers that the marketplace is already on disk, it was added before;
-   go on to the second. Any other agent, with Node present:
-   `npx skills add markpollack/java-guardrails`. By hand:
+   go on to the second. For other agents, with Node.js 22.20 or newer, install for all projects:
+   `npx skills add markpollack/java-guardrails -g`. By hand:
    `git clone https://github.com/markpollack/java-guardrails .claude/skills/java-guardrails`.
 
 2. **Open your project in the agent and ask for quality gates:**
@@ -150,7 +150,10 @@ your agent reads it:
 /plugin marketplace add markpollack/java-guardrails
 /plugin install java-guardrails@java-guardrails
 
-# any agent that reads the Agent Skills format, with Node present
+# any agent that reads the Agent Skills format, across all projects (Node.js 22.20+)
+npx skills add markpollack/java-guardrails -g
+
+# optional: this project only; run from its root
 npx skills add markpollack/java-guardrails
 
 # by hand, into the agent's skills folder
@@ -170,8 +173,15 @@ tracks the `main` branch, so the tag is for pinning and for humans.
 |---|---|---|
 | JBang catalog | `guardrails@markpollack/java-guardrails/v0.1.0` | next run after the cache expires, or `jbang --fresh ...` |
 | Claude Code marketplace | the `version` in `plugin.json` pins until it changes | `claude plugin update java-guardrails@java-guardrails` |
-| `npx skills add` | not by default | `npx skills update java-guardrails` |
+| `npx skills add ... -g` (all projects) | not by default | `npx skills add markpollack/java-guardrails -g` again |
+| `npx skills add ...` (one project) | not by default | `npx skills add markpollack/java-guardrails` again, from that project root |
 | `git clone` | `git checkout v0.1.0` | `git pull` |
+
+`-g` records a user-wide installation; without it, `add` records project scope in the current
+directory's `skills-lock.json`, even when that directory is your home directory. To upgrade,
+rerun `add` in the same scope and select the same agents; this refreshes their installed files,
+including copied installations. `skills update` has a separate scope selection: choosing Global
+does not update a project installation, even if its installed files look user-wide.
 
 Upgrading the kit never touches your project. The ruleset and plugin block copied into your
 repository are yours. When a new version changes a threshold or adds an exemption shape, run

@@ -25,13 +25,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Release notes exist and versions agree
+      - name: Release notes exist, versions agree, and changelog is dated
         env:
           VERSION: ${{ inputs.version }}
         run: |
           test -f ".github/release-notes/${VERSION}.md" || { echo "::error::.github/release-notes/${VERSION}.md is missing"; exit 1; }
           grep -q "\"version\": \"${VERSION}\"" .claude-plugin/plugin.json || { echo "::error::.claude-plugin/plugin.json version is not ${VERSION}"; exit 1; }
           grep -q "version: \"${VERSION}\"" SKILL.md || { echo "::error::SKILL.md metadata.version is not ${VERSION}"; exit 1; }
+          python3 - <<'PY'
+          import datetime
+          import os
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          prefix = f"## {version} — "
+          headings = [line for line in Path("CHANGELOG.md").read_text().splitlines() if line.startswith(prefix)]
+          try:
+              if len(headings) != 1:
+                  raise ValueError("missing or duplicate release heading")
+              date = headings[0][len(prefix):]
+              if datetime.date.fromisoformat(date).isoformat() != date:
+                  raise ValueError("date must use YYYY-MM-DD")
+          except ValueError:
+              raise SystemExit(f"::error::CHANGELOG.md needs exactly one '## {version} — YYYY-MM-DD' heading with a valid release date; Unreleased cannot be tagged")
+          PY
       - name: Tag and publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

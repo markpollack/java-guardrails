@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.2 — Unreleased
+## 0.3.2 — 2026-10-29
 
 - Account for every selected JaCoCo module using compiled bytecode: executable code without a report stops before any floor proposal or validation; non-executable modules are named and need no floor.
 - Ask test-support scope in assessment before the first gate, and in direct JaCoCo measurement before building. Gated test support requires its own report; consumer-only execution is not aggregated.
