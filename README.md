@@ -18,7 +18,7 @@ base's own facts, which `assess` reads (below), not from the table.
 
 | Question | Gate | Cost, cadence | Status |
 |---|---|---|---|
-| Is the code executed by its own tests? | JaCoCo floors | seconds after the tests; every commit | **Proven end to end on two code bases**, measured with floors recorded on a third; the measure detects the surefire argLine trap; the floors are a notification, not a question. |
+| Is the code executed by its own tests? | JaCoCo floors | seconds after the tests; every commit | **Proven end to end on two code bases**, measured with floors recorded on a third; measurement checks report completeness and the surefire argLine trap; complete nonzero coverage proposes floors by notification. |
 | Is executed code wrong in a known shape? | SpotBugs rank 9 plus concurrency | minutes; every change | **Proven end to end on three code bases**: six real findings on the second and four on the third, all concurrency or locking. |
 | Is executed code wrong in a known shape? | Error Prone defaults at ERROR | a compile under JDK 21; every change | **Proven end to end on two code bases**: measured, decided, installed, green, falsified. Three real bugs on the second. |
 | What must be refactored before the others can see it? | PMD size, complexity and duplication | minutes, then the refactoring; a target, then a gate | **Proven end to end on two code bases**: measured, decided, installed, green, falsified; measured on a third, where the references did not fit (`evidence/agent-journal.md`). |
@@ -293,5 +293,11 @@ extensions still run normally, and their failures are shown rather than counted 
 
 Use `EXCLUDED_MODULES: path, other/path` in `config/guardrails/decisions.md` for general exclusions.
 Old `TEST_SUPPORT_MODULES: exclude ...` entries keep excluding their paths. Only an actual test-support
-answer suppresses PMD's test-support stop; an old exclusion of a standalone tool no longer does.
+answer suppresses the test-support stop; an old exclusion of a standalone tool no longer does.
+`assess` asks this before the first gate, and direct JaCoCo measurement checks before building.
+JaCoCo accounts for every selected module: executable classes without a report stop measurement
+before floors are proposed or validated, while modules without executable bytecode are named and
+need no floor. Gated test support needs its own tests/report; consumer-only execution is not
+aggregated. See [the JaCoCo playbook](playbooks/21-jacoco.md) for missing reports, opt-in integration
+tests and previously recorded partial floors.
 Updating the kit does not rewrite a target's decisions or copied Maven configuration.

@@ -369,6 +369,28 @@ final class Util {
 
 	// ---- Stop blocks ------------------------------------------------------------------------------
 
+	/** Resolve shared scope at assessment, and again before coverage for direct script callers. */
+	static boolean testSupportStop(List<Module> modules, Decisions decisions) {
+		List<Module> support = modules.stream().filter(m -> !m.testSupportReasons().isEmpty()).toList();
+		if (support.isEmpty() || decisions.testSupportDecided(support)) return false;
+		List<Module> selected = support.stream().filter(m -> decisions.excludedModules().stream()
+				.noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/"))).toList();
+		if (selected.isEmpty()) return false;
+		System.out.println("```");
+		System.out.println(stopHeader("TEST_SUPPORT_MODULES", true));
+		System.out.print(kindLine(true));
+		System.out.println("  These selected modules look like test support in src/main/java:");
+		for (Module m : selected) System.out.println("    " + m.path() + ": " + String.join("; ", m.testSupportReasons()));
+		System.out.println("  Decide scope before the first gate, including JaCoCo. Gating test support requires its own tests and coverage report; execution only by consumer tests does not supply that report.");
+		System.out.println("  Options: (a) exclude these modules from the gates   (b) gate them as published code");
+		System.out.println("  Recommendation: (a) for test-only infrastructure; (b) when its published behavior needs the same guarantees.");
+		System.out.println("  Record as:  TEST_SUPPORT_MODULES: exclude " + selected.stream().map(Module::path).collect(Collectors.joining(", ")));
+		System.out.println("          or  TEST_SUPPORT_MODULES: gate");
+		System.out.println("  Preserve any existing excluded paths when editing the decision.");
+		System.out.println("```");
+		return true;
+	}
+
 	/**
 	 * The first line of a STOP block: {@code STOP <ID> (notify)} when the recommendation is the
 	 * kit's mechanical default and the data is unambiguous, so the agent records the line and

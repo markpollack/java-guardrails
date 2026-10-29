@@ -62,6 +62,8 @@ jobs:
         run: ./jbang tests/PmdRatchetTest.java .
       - name: Reactor dependencies, module scope and checker isolation
         run: ./jbang tests/ReactorScopeTest.java .
+      - name: JaCoCo accounts for every selected module before proposing floors
+        run: ./jbang tests/JacocoCompletenessTest.java .
       - name: SKILL.md validates against the Agent Skills spec
         run: npx -y skills-ref validate .
       - name: Manifests are valid JSON and point at the root

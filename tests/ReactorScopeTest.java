@@ -57,6 +57,7 @@ public class ReactorScopeTest {
         Files.writeString(lib, validLib);
 
         Path nested = fixture("nested", false, true);
+        decisions(nested, "TEST_SUPPORT_MODULES: exclude test-support\n");
         List<String> paths = Util.modules(nested).stream().map(Util.Module::path).toList();
         require(paths.equals(List.of("app", "test-support")), "inventory excludes standalone nested project", paths.toString());
         check(script(nested, "JacocoMeasure.java"), "nested standalone cannot enter Maven selection", "| app |");
@@ -87,7 +88,7 @@ public class ReactorScopeTest {
         require(!empty.output.contains("Running:") && !empty.output.contains("STOP JACOCO_FLOORS"), "empty selection cannot run entire reactor", empty.output);
 
         // A real compiler failure before any test must remain visible to the caller.
-        decisions(nested, "TEST_SUPPORT_MODULES: exclude tools/docgen\n");
+        decisions(nested, "TEST_SUPPORT_MODULES: gate\nEXCLUDED_MODULES: tools/docgen\n");
         Files.writeString(nested.resolve("app/src/main/java/fx/app/App.java"), "package fx.app; public class App { MissingType broken; }\n");
         Result broken = script(nested, "JacocoMeasure.java");
         require(broken.exit != 0 && broken.output.contains("cannot find symbol") && !broken.output.contains("STOP JACOCO_FLOORS"), "pre-test Maven compiler error is surfaced without floors", broken.output);
@@ -97,6 +98,7 @@ public class ReactorScopeTest {
         }
 
         Path profiles = fixture("profiles", false, true);
+        decisions(profiles, "TEST_SUPPORT_MODULES: exclude test-support\n");
         String pom = Files.readString(profiles.resolve("pom.xml"));
         Files.writeString(profiles.resolve("pom.xml"), pom.replace("<module>test-support</module>", "")
                 .replace("<profiles>", "<profiles><profile><id>support</id><activation><activeByDefault>true</activeByDefault></activation><modules><module>test-support</module></modules></profile>"));

@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.3.1 — Unreleased
+## 0.3.2 — Unreleased
+
+- Account for every selected JaCoCo module using compiled bytecode: executable code without a report stops before any floor proposal or validation; non-executable modules are named and need no floor.
+- Ask test-support scope in assessment before the first gate, and in direct JaCoCo measurement before building. Gated test support requires its own report; consumer-only execution is not aggregated.
+- Detect incomplete recorded coverage floors, preserve existing values and request a completion decision.
+- Add real Maven regressions for no tests, opt-in IT only, test support executed by consumers, abstract-only interfaces and default methods, exclusions, saved partial floors and compiler failures.
+
+## 0.3.1 — 2026-10-28
 
 - Build scoped Maven commands with working-tree reactor dependencies, including a compile before source-check goals that resolve sibling artifacts.
 - Use one shared Maven policy to isolate each requested checker; compiler checkers are active only for Error Prone and NullAway. A target's disabled gate stays disabled so falsification can reject it.

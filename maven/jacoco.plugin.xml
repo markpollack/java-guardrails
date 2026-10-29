@@ -8,7 +8,10 @@
                  The gate (check, in verify) fails when a module's LINE or BRANCH covered ratio
                  falls below its floor. Every module declares jacoco.minimum.line and
                  jacoco.minimum.branch; the default below is full coverage, so a new module
-                 fails until it declares measured floors. A floor is the coverage measured from a clean verify less a margin of
+                 with execution data fails until it declares measured floors. Without execution
+                 data JaCoCo can skip the check: a 1.00 default alone is not proof. Run
+                 measure-jacoco and resolve every missing-report stop before installing floors.
+                 A floor is the coverage measured from a clean verify less a margin of
                  2 points, rounded down to a whole percent: enough for the run-to-run variation
                  of the concurrent tests (a branch or two), too little to lose a test class
                  unnoticed. Raise a floor when coverage rises; lower one only with a reason in

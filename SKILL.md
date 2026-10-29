@@ -5,7 +5,7 @@ license: Business Source License 1.1; see LICENSE
 compatibility: Requires a JDK 17 or newer and a Maven project with the Maven wrapper. The bundled JBang wrapper resolves everything else on first run. Gradle is not yet supported.
 metadata:
   author: markpollack
-  version: "0.3.1"
+  version: "0.3.2"
 ---
 
 # java-guardrails
@@ -77,7 +77,8 @@ the data, and the exact line to record. The kind is the second line of every blo
   style-tagged). Write the `Record as:` line into the decisions file, show the block to the owner
   in your reply, and continue. Do not ask.
 - **`decide`**: the options lead to materially different outcomes (`TEST_SUPPORT_MODULES`,
-  `PMD_MECHANISM`, `CLASS_SIZE`, `THRESHOLD_FIT_*`, `SPOTBUGS_MECHANISM`, `ARCHUNIT_CYCLES`).
+  `PMD_MECHANISM`, `CLASS_SIZE`, `THRESHOLD_FIT_*`, `SPOTBUGS_MECHANISM`, `ARCHUNIT_CYCLES`,
+  `JACOCO_MISSING_REPORTS`).
   Relay the block to the owner **as written**, as a fenced text block in your reply. Do not
   paraphrase, merge or summarise blocks, and do not answer them yourself. A question widget with
   the block's options is optional; the text is the contract. Do not proceed past a `decide` block
@@ -98,6 +99,13 @@ children) from measurement and plant selection; `none` clears this list. It does
 those paths; an entry that excludes only non-test modules no longer suppresses the test-support
 stop. Move general exclusions to `EXCLUDED_MODULES` when convenient, then answer the emitted
 stop for test-support modules. `TEST_SUPPORT_MODULES: gate` remains a complete answer.
+
+`assess` asks `TEST_SUPPORT_MODULES` before the first gate; direct JaCoCo measurement checks it
+before building too. Do not defer this question until PMD. Gated test support needs its own
+coverage report; consumer-only execution is not aggregated. JaCoCo names modules without
+executable code and stops on missing reports for executable modules before proposing or
+validating floors. Follow `playbooks/21-jacoco.md` for that decision, including already recorded
+partial floors; a missing report is not measured zero coverage.
 
 ## Rules that are not negotiable
 

@@ -10,7 +10,10 @@
    `--quick` skips it), runs no build. Prints the build tool, Java level, modules with tests per
    10 main files, the tooling in the build, the decisions recorded, a **gate analysis**, the
    **order**, and the next gate.
-2. **Notify** - `GATE_ORDER`: the recommended order as one line to record. The block is
+2. **Stop** - if selected modules look like test support and their scope is unanswered,
+   `TEST_SUPPORT_MODULES` comes first. Relay the block, wait for the owner, record the answer,
+   then rerun. This applies before the first gate, including when JaCoCo precedes PMD.
+   **Notify** - `GATE_ORDER`: the recommended order as one line to record. The block is
    `notify`; reordering is an edit to the line, and later runs name the next gate from it and
    say what the analysis would have recommended.
 3. **AI** - read it. A missing Maven wrapper is added before anything else. A PMD plugin

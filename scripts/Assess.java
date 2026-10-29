@@ -309,6 +309,10 @@ public class Assess {
 
 		System.out.println("## Stops");
 		System.out.println();
+		if (Util.testSupportStop(modules, decisions)) {
+			System.out.println("Answer TEST_SUPPORT_MODULES and rerun assess before installing the first gate.");
+			System.exit(0); // a timed-out PMD worker may still be running
+		}
 		if (recorded.isEmpty()) {
 			System.out.println("Record the line below in `" + target.relativize(decisions.file) + "` (create the file with a `# java-guardrails decisions` heading if absent, the date in parentheses), show the block to the owner, and continue: a notification, not a decision.");
 			System.out.println();
