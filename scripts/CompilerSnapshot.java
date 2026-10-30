@@ -1,7 +1,7 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 21+
 //DEPS com.google.code.gson:gson:2.13.2
-//SOURCES Util.java Findings.java Declarations.java Xml.java
+//SOURCES ValidationPlan.java Util.java Findings.java Declarations.java Xml.java
 
 import java.nio.file.*;
 import java.util.*;
@@ -12,7 +12,7 @@ public class CompilerSnapshot {
     public static void main(String[] args)throws Exception{
         if(args.length==1&&args[0].equals("--help")){System.out.println("CompilerSnapshot.java TARGET OUTPUT_DIR COMPILER_LOG: requires complete debug compile with Error Prone active in every selected module");return;}
         Path target=Path.of(args[0]).toAbsolutePath().normalize(),out=Path.of(args[1]);long start=System.nanoTime();
-        var d=Util.Decisions.read(target);var modules=Util.modules(target).stream().filter(m->d.excludedModules().stream().noneMatch(x->m.path().equals(x)||m.path().startsWith(x+"/"))).toList();
+        var d=Util.Decisions.read(target);var modules=ValidationPlan.modules(target).stream().filter(m->d.excludedModules().stream().noneMatch(x->m.path().equals(x)||m.path().startsWith(x+"/"))).toList();
         Pattern diagnostic=Pattern.compile("^\\[(?:WARNING|ERROR)\\] (.+\\.java):\\[(\\d+),(\\d+)\\] (.*)$");
         Map<Path,Declarations> bindings=new HashMap<>();List<Findings.Finding> ep=new ArrayList<>(),nullaway=new ArrayList<>();Set<String> active=new HashSet<>(),hidden=new HashSet<>();SortedSet<String> nullnessContract=new TreeSet<>();String artifact="";
         for(String raw:Files.readAllLines(Path.of(args[2]))){String line=raw.replaceAll("\\u001B\\[[;\\d]*m","");

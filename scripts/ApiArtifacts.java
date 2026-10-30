@@ -1,5 +1,5 @@
 //JAVA 21+
-//SOURCES Util.java
+//SOURCES ValidationPlan.java Util.java
 //DEPS com.google.code.gson:gson:2.13.2
 import java.nio.file.*;
 import java.util.*;
@@ -9,9 +9,16 @@ import com.google.gson.GsonBuilder;
 /** All reactor source modules, including gate-excluded modules, remain in the frozen API inventory. */
 final class ApiArtifacts {
     record Artifact(String module,String jar,String classpath){}
+    static void merge(Path previous,Path output,List<String> selected)throws Exception{
+        var gson=new GsonBuilder().create();
+        var old=gson.fromJson(Files.readString(previous.resolve("artifacts.json")),Artifact[].class);
+        var now=gson.fromJson(Files.readString(output.resolve("artifacts.json")),Artifact[].class);
+        List<Artifact> merged=new ArrayList<>(Arrays.stream(old).filter(a->!selected.contains(a.module())).toList());merged.addAll(List.of(now));
+        merged.sort(Comparator.comparing(Artifact::module));Files.writeString(output.resolve("artifacts.json"),gson.toJson(merged)+"\n");
+    }
     static void capture(Path target,Path output)throws Exception{
         List<Artifact> artifacts=new ArrayList<>();Files.createDirectories(output);
-        for(var module:Util.modules(target)){
+        for(var module:ValidationPlan.modules(target)){
             Path classes=module.dir().resolve("target/classes");if(!Files.isDirectory(classes))throw new IllegalStateException("Missing API classes: "+module.path());
             Path jar=output.resolve(module.path().replace('/','_')+".jar");int count=0;
             try(var stream=Files.walk(classes);var out=new JarOutputStream(Files.newOutputStream(jar))){

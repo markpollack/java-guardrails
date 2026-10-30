@@ -2,7 +2,7 @@
 //JAVA 21+
 //DEPS org.jacoco:org.jacoco.core:0.8.15
 //DEPS com.google.code.gson:gson:2.13.2
-//SOURCES Util.java Findings.java Xml.java
+//SOURCES ValidationPlan.java Util.java Findings.java Xml.java
 
 import java.nio.file.*;
 import java.util.*;
@@ -16,7 +16,7 @@ public class BytecodeSnapshot {
     public static void main(String[] args)throws Exception {
         if(args.length==1&&args[0].equals("--help")){System.out.println("BytecodeSnapshot.java TARGET OUTPUT_DIR TEST_BUILD_LOG: complete JaCoCo and SpotBugs machine snapshots");return;}
         Path target=Path.of(args[0]).toAbsolutePath().normalize(),output=Path.of(args[1]);long start=System.nanoTime();
-        var d=Util.Decisions.read(target);var modules=Util.modules(target).stream().filter(m->d.excludedModules().stream().noneMatch(x->m.path().equals(x)||m.path().startsWith(x+"/"))).toList();
+        var d=Util.Decisions.read(target);var modules=ValidationPlan.modules(target).stream().filter(m->d.excludedModules().stream().noneMatch(x->m.path().equals(x)||m.path().startsWith(x+"/"))).toList();
         List<Findings.Finding> coverage=new ArrayList<>(),bugs=new ArrayList<>();List<Path> classes=new ArrayList<>();
         Set<String> noTests=noTests(Files.readString(Path.of(args[2])));
         for(var m:modules){

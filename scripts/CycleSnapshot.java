@@ -3,7 +3,7 @@
 //DEPS com.tngtech.archunit:archunit:1.4.1
 //DEPS org.slf4j:slf4j-nop:1.7.36
 //DEPS com.google.code.gson:gson:2.13.2
-//SOURCES Util.java ArchUnitMeasure.java Findings.java
+//SOURCES ValidationPlan.java Util.java ArchUnitMeasure.java Findings.java
 
 import java.nio.file.*;
 import java.util.*;
@@ -16,14 +16,22 @@ public class CycleSnapshot {
         if (args.length == 1 && args[0].equals("--help")) { System.out.println("CycleSnapshot.java TARGET OUTPUT.json: consume freshly compiled classes; caller owns clean compile proof"); return; }
         Path target = Path.of(args[0]).toAbsolutePath().normalize(); long start = System.nanoTime();
         var decisions = Util.Decisions.read(target);
-        var modules = Util.modules(target).stream().filter(m -> decisions.excludedModules().stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x+"/"))).toList();
+        var modules = ValidationPlan.modules(target).stream().filter(m -> decisions.excludedModules().stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x+"/"))).toList();
         List<Findings.Finding> findings = new ArrayList<>(); List<Path> files = new ArrayList<>();
         for (var module : modules) {
             Path dir = module.dir().resolve("target/classes");
             if (!Files.isDirectory(dir)) throw new IllegalStateException("Missing classes: " + module.path());
             var classes = new ClassFileImporter().importPath(dir);
-            if (classes.isEmpty()) throw new IllegalStateException("Empty class import: " + module.path());
             try (var paths = Files.walk(dir)) { files.addAll(paths.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".class")).toList()); }
+            if (classes.isEmpty()) {
+                List<Path> sources=Util.javaFiles(module.sourceRoot());
+                Path descriptor=dir.resolve("module-info.class");
+                boolean descriptorOnly=!sources.isEmpty()&&sources.stream().allMatch(p->p.getFileName().toString().equals("module-info.java"));
+                if(!descriptorOnly||!Files.isRegularFile(descriptor))throw new IllegalStateException("Empty class import: " + module.path());
+                try(var input=Files.newInputStream(descriptor)){java.lang.module.ModuleDescriptor.read(input);}
+                System.out.println("Descriptor-only module: "+module.path()+"; no classes to assess for cycles");
+                continue;
+            }
             for (String kind : List.of("class", "package")) {
                 var rule = SlicesRuleDefinition.slices().assignedFrom(kind.equals("class") ? ArchUnitMeasure.TOP_LEVEL_CLASS : ArchUnitMeasure.PACKAGE).should().beFreeOfCycles();
                 for (var cycle : ArchUnitMeasure.evaluate(rule, classes, module.path(), kind)) {

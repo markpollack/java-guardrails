@@ -3,7 +3,7 @@
 //DEPS net.sourceforge.pmd:pmd-java:7.28.0
 //DEPS org.slf4j:slf4j-simple:1.7.36
 //DEPS com.google.code.gson:gson:2.13.2
-//SOURCES Util.java PmdMeasure.java Declarations.java Findings.java
+//SOURCES ValidationPlan.java Util.java PmdMeasure.java Declarations.java Findings.java
 
 import java.nio.file.*;
 import java.util.*;
@@ -17,7 +17,7 @@ public class SourceSnapshot {
         Path target = Path.of(args[0]).toAbsolutePath().normalize();
         long start = System.nanoTime();
         var decisions = Util.Decisions.read(target);
-        var modules = Util.modules(target).stream().filter(m -> decisions.excludedModules().stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x+"/"))).toList();
+        var modules = ValidationPlan.modules(target).stream().filter(m -> decisions.excludedModules().stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x+"/"))).toList();
         if (modules.isEmpty()) throw new IllegalStateException("No selected source modules");
         PmdMeasure.MeasureRule.MODULES = modules;
         PmdMeasure.analyse(target, modules, Util.javaVersion(target));

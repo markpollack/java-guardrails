@@ -1,5 +1,5 @@
 //JAVA 21+
-//SOURCES BytecodeSnapshot.java Util.java Xml.java Findings.java Run.java
+//SOURCES ValidationPlan.java BytecodeSnapshot.java Util.java Xml.java Findings.java Run.java
 //DEPS org.jacoco:org.jacoco.core:0.8.15
 import java.nio.file.*;
 import java.util.*;
@@ -14,7 +14,7 @@ final class NoTestsProbe {
     static void prove(Path scratch,Path output,Path repo)throws Exception{
         String log=Files.readString(output.resolve("tests.log"));Set<String> known=BytecodeSnapshot.noTests(log);
         var decisions=Util.Decisions.read(scratch);
-        for(var module:Util.modules(scratch)){
+        for(var module:ValidationPlan.modules(scratch)){
             if(decisions.excludedModules().stream().anyMatch(path->module.path().equals(path)||module.path().startsWith(path+"/")))continue;
             Path report=module.dir().resolve("target/site/jacoco/jacoco.xml"),classes=module.dir().resolve("target/classes");
             if(Files.exists(report)||!Files.isDirectory(classes))continue;

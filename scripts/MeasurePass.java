@@ -2,7 +2,7 @@
 //JAVA 21+
 //DEPS com.google.code.gson:gson:2.13.2
 //DEPS org.jacoco:org.jacoco.core:0.8.15
-//SOURCES Util.java Xml.java Declarations.java ApiArtifacts.java NoTestsProbe.java BytecodeSnapshot.java Run.java
+//SOURCES ValidationPlan.java ConsumerSnapshot.java Util.java Xml.java Declarations.java ApiArtifacts.java NoTestsProbe.java BytecodeSnapshot.java Run.java
 
 import java.nio.file.*;
 import java.util.*;
@@ -12,35 +12,58 @@ import org.w3c.dom.*;
 public class MeasurePass {
     static Path target, output, kit, repo, scratch;
     static String original;
+    static ValidationPlan.Plan plan;
     static Map<Path,String> originalPoms=new LinkedHashMap<>();
     public static void main(String[] args)throws Exception {
         if(args.length==1&&args[0].equals("--help")){System.out.println("MeasurePass.java TARGET OUTPUT_DIR KIT PRIVATE_MAVEN_REPO: all five default measurements in scratch, halt on any incomplete result");return;}
-        if(args.length!=4)throw new IllegalArgumentException("Use --help");
+        if(args.length!=4&&args.length!=5)throw new IllegalArgumentException("Use --help");
         target=Path.of(args[0]).toAbsolutePath().normalize();output=Path.of(args[1]).toAbsolutePath().normalize();kit=Path.of(args[2]).toAbsolutePath().normalize();repo=Path.of(args[3]).toAbsolutePath().normalize();
         if(repo.startsWith(Path.of(System.getProperty("user.home"),".m2")))throw new IllegalArgumentException("Use a private Maven repository outside ~/.m2");
+        if(args.length==5)plan=ValidationPlan.read(Path.of(args[4]));
         Files.createDirectories(output);Files.createDirectories(repo);scratch=Files.createTempDirectory(output,"source-");
         long start=System.nanoTime();
         try{
-            copy(); original=Files.readString(scratch.resolve("pom.xml"));
+            copy();
+            if(plan!=null&&!plan.full())ValidationPlan.write(scratch.resolve(".guardrails-measure-scope.json"),plan);
+            original=Files.readString(scratch.resolve("pom.xml"));
             script("SourceSnapshot.java",scratch.toString(),output.resolve("pmd.json").toString());
-            // Tests run with the original POM, only the standalone JaCoCo agent/report goals added.
-            // Package upstream test-jars before consumers run: test-classes bypasses their
-            // published includes/excludes and can expose tests with non-transitive dependencies.
-            List<String> test=maven("jacoco");test.addAll(List.of("clean","org.jacoco:jacoco-maven-plugin:0.8.15:prepare-agent","package","org.jacoco:jacoco-maven-plugin:0.8.15:report"));
-            run(test,scratch,output.resolve("tests.log"));
+            // One fresh compilation supplies compiler diagnostics, tests, coverage, bytecode
+            // analysis and API artifacts. Overlays are reporting-only and remain in scratch.
+            compiler();spotbugs();
+            List<String> build=maven("errorprone");
+            build.remove("-Djacoco.skip=true");build.remove("-Dspotbugs.skip=true");
+            build.addAll(List.of("-X","-Derrorprone.failOnWarning=false","-Derrorprone.extraArgs=-XepAllErrorsAsWarnings -XepIgnoreSuppressionAnnotations",
+                "-Dspotbugs.skip=false","clean","org.jacoco:jacoco-maven-plugin:0.8.15:prepare-agent","package",
+                "org.jacoco:jacoco-maven-plugin:0.8.15:report","com.github.spotbugs:spotbugs-maven-plugin:4.9.8.5:spotbugs",
+                "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath","-Dmdep.outputFile=target/guardrails-api-classpath.txt"));
+            if(plan!=null&&!plan.full())build.addAll(List.of("-pl",String.join(",",plan.modules()),"-am"));
+            else build.addAll(List.of("org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom","-Doutput="+output.resolve("reactor-model.xml")));
+            System.out.println("Validation: compile, test and analyze shared outputs");
+            run(build,scratch,output.resolve("tests.log"));
+            Files.copy(output.resolve("tests.log"),output.resolve("compiler.log"));
             NoTestsProbe.prove(scratch,output,repo);
             script("CycleSnapshot.java",scratch.toString(),output.resolve("archunit.json").toString());
-            spotbugs();List<String> spot=maven("spotbugs");spot.addAll(List.of("-Dspotbugs.skip=false","-DskipTests","package","com.github.spotbugs:spotbugs-maven-plugin:4.9.8.5:spotbugs"));run(spot,scratch,output.resolve("spotbugs.log"));
             script("BytecodeSnapshot.java",scratch.toString(),output.toString(),output.resolve("tests.log").toString());
+            script("CompilerSnapshot.java",scratch.toString(),output.toString(),output.resolve("compiler.log").toString());
+            ApiArtifacts.capture(scratch,output.resolve("api"));
+            if(plan!=null&&!plan.full()){
+                ApiArtifacts.merge(Path.of(plan.previous(),"api"),output.resolve("api"),plan.modules());
+                Files.copy(Path.of(plan.previous(),"reactor-graph.json"),output.resolve("reactor-graph.json"));
+                ValidationPlan.merge(Path.of(plan.previous()),output,plan.modules());
+            }else ValidationPlan.graph(scratch,output.resolve("reactor-model.xml"),output.resolve("reactor-graph.json"));
             restorePoms();
             script("OptionalSnapshot.java",scratch.toString(),output.toString(),repo.toString());
-            List<String> api=maven("archunit");api.addAll(List.of("-DskipTests","package","org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath","-Dmdep.outputFile=target/guardrails-api-classpath.txt"));
-            run(api,scratch,output.resolve("api-build.log"));ApiArtifacts.capture(scratch,output.resolve("api"));
-            script("ConsumerSnapshot.java","capture",scratch.toString(),output.resolve("consumer").toString(),repo.toString());
+            if(plan==null||plan.resolveConsumer()){
+                script("ConsumerSnapshot.java","capture",scratch.toString(),output.resolve("consumer").toString(),repo.toString());
+            }else{
+                Path prior=Path.of(plan.previous(),"consumer/dependencies.json");
+                var closure=ConsumerSnapshot.read(prior);
+                if(!closure.profiles().equals(ConsumerSnapshot.profiles(scratch)))throw new IllegalStateException("Publication profile changed without a POM diff; full finish capture required");
+                Files.createDirectories(output.resolve("consumer"));Files.copy(prior,output.resolve("consumer/dependencies.json"));
+                Files.writeString(output.resolve("consumer/reuse-proof.txt"),"no POM changed\nbase tree: "+plan.baseTree()+"\ncandidate tree: "+plan.candidateTree()+"\nsource evidence: "+prior+"\nchanged files:\n"+String.join("\n",plan.changedFiles())+"\n");
+                System.out.println("Consumer resolution skipped: no POM changed (diff recorded)");
+            }
             preserveRaw();
-            compiler();List<String> compile=maven("errorprone");compile.addAll(List.of("-X","-DskipTests","-Derrorprone.failOnWarning=false","-Derrorprone.extraArgs=-XepAllErrorsAsWarnings -XepIgnoreSuppressionAnnotations","clean","compile"));
-            run(compile,scratch,output.resolve("compiler.log"));
-            script("CompilerSnapshot.java",scratch.toString(),output.toString(),output.resolve("compiler.log").toString());
             Files.writeString(output.resolve("elapsed-millis.txt"),Long.toString((System.nanoTime()-start)/1_000_000)+"\n");
             System.out.println("Full measurement complete: "+output);
         }catch(Exception e){
