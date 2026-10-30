@@ -5,7 +5,7 @@ license: Business Source License 1.1; see LICENSE
 compatibility: Requires a JDK 17 or newer and a Maven project with the Maven wrapper. The bundled JBang wrapper resolves everything else on first run. Gradle is not yet supported.
 metadata:
   author: markpollack
-  version: "0.3.2"
+  version: "0.3.3"
 ---
 
 # java-guardrails

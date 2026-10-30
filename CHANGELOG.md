@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 — 2026-10-30
+
+- Handle nonempty single-package modules in ArchUnit measurement and copied gates. Include root packages in package-cycle checks, retain class-cycle checks and the nonempty-import assertion, and fail measurement on missing or empty compiled classes.
+- Falsify single-package ArchUnit gates by planting a class cycle in the sole package; add real Maven regressions with disabled-rule and empty-import controls.
+- Align `npx skills` install and refresh instructions by scope, recommending `-g` for all-projects use and repeating `add` for the same scope and agents.
+- Date the 0.3.2 changelog entry on the default branch and require a valid dated heading for the version being tagged before release publication.
+
 ## 0.3.2 — 2026-10-29
 
 - Account for every selected JaCoCo module using compiled bytecode: executable code without a report stops before any floor proposal or validation; non-executable modules are named and need no floor.
