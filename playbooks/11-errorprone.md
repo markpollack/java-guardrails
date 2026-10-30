@@ -7,9 +7,10 @@
 The gate: Error Prone's default-enabled checks through a Maven profile `errorprone` on the main
 compile execution, with javac's `-Werror` so that a WARNING-level check fails the build like an
 ERROR one, plus the checks the kit raises for a library (`SystemOut`; `CheckReturnValue` over
-Reactor with a written list of droppable results). Style checks are disabled by name in the
-profile with a reason in `configs/errorprone/disabled-checks.txt`; a real exception is a
-`@SuppressWarnings` with a reason, never a disabled check.
+Reactor with a written list of droppable results). Fix mechanically safe style findings as well
+as bugs. Preserve existing explicit check decisions; new inherited API-blocked exceptions use
+a named `@SuppressWarnings` on the smallest declaration, with a recorded reason. Full pass
+measurement still sees those findings.
 
 ## Steps
 
@@ -22,8 +23,14 @@ profile with a reason in `configs/errorprone/disabled-checks.txt`; a real except
    otherwise drop the `CheckReturnValue` options from the profile); the four properties
    (`errorprone.version`, `nullaway.version`, `errorprone.failOnWarning`, `errorprone.extraArgs`)
    and the profile from `maven/errorprone.profile.xml` into the root pom, with the execution id
-   from step 1. Modules the owner left out of the gates get
-   `<errorprone.extraArgs>-XepDisableAllChecks</errorprone.extraArgs>` in their own pom.
+   from step 1. Apply the recorded module exclusions to Maven inheritance as well:
+   `EXCLUDED_MODULES` controls kit scope, but does not edit the build. In each excluded
+   module, override the inherited main compile execution with `failOnWarning=false` and
+   `compilerArgs combine.self="override"` containing its original compiler arguments,
+   without the Error Prone arguments. If it had no arguments, use an empty element.
+   Keep ordinary compilation and any existing annotation processors enabled. Disabling
+   Error Prone alone leaves javac's `-Werror` active and can still break an excluded module
+   on removal warnings. Prove the complete reactor build, including excluded modules.
 3. **Script** — `./jbang measure-errorprone <target>` (from elsewhere:
    `<kit>/jbang <kit>/scripts/ErrorProneMeasure.java <target>`). Runs the profile in report mode
    (every finding a warning, nothing fails), groups findings by check and module, and classifies
