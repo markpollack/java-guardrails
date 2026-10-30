@@ -1,9 +1,4 @@
-# Error Prone checks disabled by name in the errorprone profile, each with its reason. These are
-# the ones found to be pure style for a library code base (acp-java, October 2026). A target
-# project adds to this list only with a reason; a real exception is a @SuppressWarnings with a
-# reason, never a disabled check.
-StatementSwitchToExpressionSwitch   style: expression switches are not clearer in every case
-InlineMeSuggester                   style: asks every deprecated method for an @InlineMe migration hint; a library's deprecations are
-                                    documented in Javadoc and release notes (MCP Java SDK, 2026-10-08: 42 findings, none a bug)
-MissingSummary                      style: a Javadoc comment without a summary sentence is a documentation gap, not a code defect;
-                                    the Javadoc tooling owns it (MCP Java SDK, 2026-10-08: 20 findings)
+# No checks are disabled by default in 0.4.0. Fix mechanically safe findings, including style.
+# Preserve explicit existing owner decisions with their reasons; do not disable a check because
+# it is frequent. Inherited API-blocked exceptions belong on the smallest named declaration,
+# recorded in decisions.md and still visible to pass measurement. Never exempt introduced findings.

@@ -1,7 +1,7 @@
 {
   "name": "java-guardrails",
   "displayName": "Java Guardrails",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Deterministic quality gates (PMD, SpotBugs, Error Prone, ArchUnit, JaCoCo, NullAway, Lincheck, PIT) with calibrated settings and playbooks for installing them one at a time on an existing Java code base, so an agent refactors until the build is green.",
   "author": { "name": "Mark Pollack" },
   "repository": "https://github.com/markpollack/java-guardrails",

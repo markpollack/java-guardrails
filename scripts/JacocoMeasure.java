@@ -93,7 +93,7 @@ public class JacocoMeasure {
 			System.out.println();
 		}
 		List<String> command = Util.maven(target, "jacoco", pl);
-		command.addAll(List.of("-q", "-Djacoco.propertyName=" + argLineProperty, "clean", JACOCO + ":prepare-agent", "test", JACOCO + ":report"));
+		command.addAll(List.of("-q", "-Djacoco.propertyName=" + argLineProperty, "clean", JACOCO + ":prepare-agent", "package", JACOCO + ":report"));
 		System.out.println("Running: " + String.join(" ", command));
 		System.out.println();
 		StringBuilder out = new StringBuilder();
@@ -151,6 +151,14 @@ public class JacocoMeasure {
 			return;
 		}
 
+        List<String> insufficient = coverages.stream().filter(c -> floor(c.line()) == 0 || floor(c.branch()) == 0).map(Coverage::module).toList();
+        if (!insufficient.isEmpty()) {
+            System.out.println("STOP JACOCO_OWN_TESTS (remediate)");
+            System.out.println("  Write own-module tests before proposing floors for: " + String.join(", ", insufficient));
+            System.out.println("  Measured-minus-two would produce a zero floor. No zero floors in either mode; a plan or a recorded zero cannot complete this gate.");
+            System.exit(1);
+        }
+
 		System.out.println("## Measured, and the floor proposed (measured minus " + MARGIN + " points, rounded down)");
 		System.out.println();
 		System.out.println("| module | lines covered | line % | floor | branches covered | branch % | floor |");
@@ -167,7 +175,13 @@ public class JacocoMeasure {
 		System.out.println();
 		java.util.Map<String, String> recordedFloors = new java.util.LinkedHashMap<>();
 		Matcher saved = FLOOR.matcher(decisions.get("JACOCO_FLOORS"));
-		while (saved.find()) recordedFloors.put(saved.group(1), saved.group(2) + "/" + saved.group(3));
+		while (saved.find()) {
+            if (Integer.parseInt(saved.group(2)) == 0 || Integer.parseInt(saved.group(3)) == 0) {
+                System.out.println("STOP JACOCO_OWN_TESTS (remediate): replace recorded zero floors for " + saved.group(1) + " with positive floors from own-module tests; preserve other recorded floors.");
+                System.exit(1);
+            }
+            recordedFloors.put(saved.group(1), saved.group(2) + "/" + saved.group(3));
+        }
 		List<String> missingFloors = coverages.stream().map(Coverage::module).filter(m -> !recordedFloors.containsKey(m)).toList();
 		if (!decisions.has("JACOCO_FLOORS") || !missingFloors.isEmpty()) {
 			// the floors are the kit's default from unambiguous data: a notification, unless a module measured nothing at all

@@ -161,7 +161,7 @@ public class ArchUnitMeasure {
 		System.out.println(Util.stopHeader("ARCHUNIT_CYCLES", true));
 		System.out.print(Util.kindLine(true));
 		System.out.println("  " + cycles.size() + " dependency cycle" + (cycles.size() == 1 ? "" : "s") + " in the gated modules, listed above. Breaking a cycle moves a type or inverts a dependency, and can change public API.");
-		System.out.println("  Options: (a) fix-all: break every cycle now, one per commit, API changes recorded   (b) scope: gate the modules that are already cycle-free, break the rest later");
+		System.out.println("  Options: (a) fix-all: break inherited cycles without changing published API, one per commit   (b) scope: gate the modules that are already cycle-free, break the rest later");
 		System.out.println("  Recommendation: " + (cycles.size() <= FIX_LIMIT ? "(a), " + cycles.size() + " is a session's work" : "(b), more than " + FIX_LIMIT));
 		System.out.println("  Record as:  ARCHUNIT_CYCLES: fix-all\n          or  ARCHUNIT_CYCLES: scope <module, module>");
 		System.out.println("```");

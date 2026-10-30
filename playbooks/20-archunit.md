@@ -57,3 +57,5 @@ the layers; it is not part of this playbook's proof yet.
   classes and has a test that fails when nothing was imported.
 - **ArchUnit's JUnit engine and JUnit 6** do not mix: the engine's platform dependency wins by
   declaration order and no test starts. The plain-library form has no such coupling.
+
+In 0.4.0, published APIs stay frozen. Repair introduced cycles before the ARCHUNIT_CYCLES decision; only inherited cycles may enter a deferred scope. Run the full pass check per hotspot, including before this gate is installed.

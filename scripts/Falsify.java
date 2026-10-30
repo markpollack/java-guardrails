@@ -374,7 +374,7 @@ public class Falsify {
 		command.add("clean");
 		if (gate.equals("jacoco")) command.add("verify");
 		else {
-			command.addAll(List.of("-DskipTests", "compile"));
+			command.addAll(List.of("-DskipTests", gate.equals("errorprone") ? "compile" : "package"));
 			if (gate.equals("spotbugs")) command.add("spotbugs:check");
 			if (gate.equals("pmd")) command.add("pmd:check@pmd-gate");
 			if (gate.equals("cpd")) command.add("pmd:cpd-check");

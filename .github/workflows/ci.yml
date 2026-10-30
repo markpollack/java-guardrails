@@ -17,7 +17,7 @@ jobs:
   kit-gate:
     name: Kit gate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 21 (Error Prone's measure needs it; everything else runs on 17)
@@ -66,6 +66,38 @@ jobs:
         run: ./jbang tests/JacocoCompletenessTest.java .
       - name: ArchUnit single-package gates, package cycles and nonempty imports
         run: ./jbang tests/ArchUnitScopeTest.java .
+      - name: Assessment resolves test-support scope consistently
+        run: ./jbang tests/AssessScopeTest.java .
+      - name: Frozen APIs reject compatible and incompatible shape changes
+        run: ./jbang tests/ApiFreezeTest.java .
+      - name: Published consumer dependencies reject unrecorded Maven mediation changes
+        run: ./jbang tests/ConsumerClosureTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Findings follow declarations and preserve multiplicity across hotspots
+        run: ./jbang tests/FindingRegressionTest.java .
+      - name: Coverage floors must remain positive
+        run: ./jbang tests/JacocoPositiveFloorTest.java .
+      - name: Full pass measurement and missing-report remediation
+        run: ./jbang tests/PassMeasurementTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Both modes preserve scope and same-version resume
+        run: ./jbang tests/PassPolicyTest.java .
+      - name: Only exact verified candidates can be accepted
+        run: ./jbang tests/PassTransactionTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Compiler exceptions remain visible and cannot hide introduced findings
+        run: ./jbang tests/CompilerExceptionTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Bytecode reports require complete reproducible evidence
+        run: ./jbang tests/EvidenceCompletenessTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Configured PIT detects assertion regressions
+        run: ./jbang tests/PitRegressionTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Configured Lincheck executes and catches lost updates
+        run: ./jbang tests/LincheckRegressionTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Configured NullAway scope cannot silently shrink
+        run: ./jbang tests/NullawayScopeTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: A direct-goal plant cannot certify dormant lifecycle enforcement
+        run: ./jbang tests/VerifyExecutionTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Cancellation stops owned measurement processes
+        run: ./jbang tests/RunProcessTest.java
+      - name: Reactor consumers use packaged test-jar contracts
+        run: ./jbang tests/TestJarReactorTest.java . "${{ runner.temp }}/guardrails-m2"
       - name: SKILL.md validates against the Agent Skills spec
         run: npx -y skills-ref validate .
       - name: Manifests are valid JSON and point at the root

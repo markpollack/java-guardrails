@@ -36,7 +36,8 @@ lower one only with a reason in the commit. Exclusions require an explicit scope
    configuration, explicitly exclude modules with a reason, or defer for a separately designed
    integration/aggregate coverage setup. Record the plan under `PROJECT_JACOCO_REMEDIATION`;
    for exclusions also update `EXCLUDED_MODULES`, preserving prior exclusions. A recorded plan
-   does not bypass remeasurement. The script runs `test`, so opt-in `*IT` sources alone do not
+   does not bypass remeasurement. The script runs through `package` so sibling test-jars honor
+   their packaging filters. It runs default-phase tests; opt-in `*IT` sources alone do not
    supply data; it does not silently activate integration profiles or fabricate zero coverage.
 2. **Notify** — `JACOCO_FLOORS`: the floors per module, measured minus 2. The recommendation is
    the kit's default from unambiguous data, so the block is `notify`: record the line in
@@ -80,3 +81,5 @@ lower one only with a reason in the commit. Exclusions require an explicit scope
 Regression evidence: `evidence/jacoco-completeness.md`. JaCoCo documents
 [bytecode counters](https://www.jacoco.org/jacoco/trunk/doc/counters.html) and
 [per-project reports](https://www.jacoco.org/jacoco/trunk/doc/report-mojo.html).
+
+In 0.4.0, write own-module tests when calibration would produce a zero floor. `JACOCO_OWN_TESTS` is remediation, not permission to record zero. Both modes require positive measured floors; legacy positive floors are preserved.

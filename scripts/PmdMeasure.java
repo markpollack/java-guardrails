@@ -61,7 +61,8 @@ import net.sourceforge.pmd.reporting.RuleContext;
 public class PmdMeasure {
 
 	/** One measured item: a method, class, lambda or duplicate block. {@code module} is the Maven or Gradle module path. */
-	record Item(String name, String where, String module, int value) {
+	record Item(String name, String where, String module, int value, int column) {
+		Item(String name, String where, String module, int value) { this(name, where, module, value, 1); }
 	}
 
 	/**
@@ -295,14 +296,14 @@ public class PmdMeasure {
 			// @JsonCreator factories
 			boolean privateConstructor = e instanceof ASTConstructorDeclaration c && c.getVisibility() == Visibility.V_PRIVATE;
 			if (!privateConstructor && !isRecordContract(e)) {
-				METHOD_PARAMS.add(new Item(name, where, module, e.getArity()));
+				METHOD_PARAMS.add(new Item(name, where, module, e.getArity(), e.getReportLocation().getStartColumn()));
 			}
 			if (e.getBody() == null) {
 				return; // abstract or interface method: no complexity or size to measure
 			}
-			METHOD_COGNITIVE.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.COGNITIVE_COMPLEXITY, e)));
-			METHOD_CYCLO.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.CYCLO, e)));
-			METHOD_NCSS.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.NCSS, e)));
+			METHOD_COGNITIVE.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.COGNITIVE_COMPLEXITY, e), e.getReportLocation().getStartColumn()));
+			METHOD_CYCLO.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.CYCLO, e), e.getReportLocation().getStartColumn()));
+			METHOD_NCSS.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.NCSS, e), e.getReportLocation().getStartColumn()));
 		}
 
 		/** A record's constructor, or a method in a record annotated @JsonCreator: restates the components. */
@@ -324,7 +325,7 @@ public class PmdMeasure {
 			if (JavaMetrics.NCSS.supports(t) && !t.isInterface()) {
 				// interfaces are exempt from class NCSS in the ruleset: their size is API surface
 				int ncss = MetricsUtil.computeMetric(JavaMetrics.NCSS, t);
-				CLASS_NCSS.add(new Item(name, where, module, ncss));
+				CLASS_NCSS.add(new Item(name, where, module, ncss, t.getReportLocation().getStartColumn()));
 				if (ncss >= CLASS_NCSS_REFERENCE && !isWireRecordContainer(t)) {
 					ClassSizeCase c = classSizeCase(t, ncss);
 					if (c != null) {
@@ -334,7 +335,7 @@ public class PmdMeasure {
 			}
 			if (JavaMetrics.WEIGHED_METHOD_COUNT.supports(t)) {
 				// what CyclomaticComplexity's classReportLevel compares against
-				CLASS_CYCLO.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.WEIGHED_METHOD_COUNT, t)));
+				CLASS_CYCLO.add(new Item(name, where, module, MetricsUtil.computeMetric(JavaMetrics.WEIGHED_METHOD_COUNT, t), t.getReportLocation().getStartColumn()));
 			}
 			if (isWireRecordContainer(t)) {
 				WIRE_CONTAINERS.add(name);
@@ -368,7 +369,7 @@ public class PmdMeasure {
 					.filter(s -> COUNTED_STATEMENTS.contains(s.getClass().getSimpleName())).count();
 			ASTExecutableDeclaration enclosing = l.ancestors(ASTExecutableDeclaration.class).first();
 			String name = (enclosing != null ? owner(enclosing) + "." + enclosing.getName() : owner(l)) + " lambda";
-			LAMBDA_STATEMENTS.add(new Item(name, where(l), module(l), count));
+			LAMBDA_STATEMENTS.add(new Item(name, where(l), module(l), count, l.getReportLocation().getStartColumn()));
 		}
 
 		/**

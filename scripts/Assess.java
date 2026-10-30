@@ -120,6 +120,11 @@ public class Assess {
 
 		// Modules
 		List<Util.Module> modules = Util.modules(target);
+		Util.Decisions decisions = Util.Decisions.read(target);
+		List<Util.Module> measured = modules.stream()
+				.filter(m -> decisions.excludedModules().stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/")))
+				.filter(m -> m.testSupportReasons().isEmpty() || decisions.testSupportDecided(modules.stream().filter(s -> !s.testSupportReasons().isEmpty()).toList()))
+				.toList();
 		if (modules.isEmpty()) {
 			System.out.println("No src/main/java below the target. Nothing to gate.");
 			return;
@@ -137,7 +142,7 @@ public class Assess {
 			List<Path> mainFiles = Util.javaFiles(m.sourceRoot());
 			int testCount = Util.javaFiles(m.dir().resolve("src").resolve("test").resolve("java")).size();
 			boolean support = !m.testSupportReasons().isEmpty();
-			if (!support) {
+			if (measured.contains(m)) {
 				mainTotal += mainFiles.size();
 				testTotal += testCount;
 				if (testCount == 0 && !mainFiles.isEmpty()) {
@@ -150,7 +155,7 @@ public class Assess {
 					concurrent++;
 				}
 			}
-			if (concurrent > 0 && !support) {
+			if (concurrent > 0 && measured.contains(m)) {
 				concurrencyPerModule.put(m.path(), concurrent);
 				concurrencyFiles += concurrent;
 			}
@@ -159,8 +164,8 @@ public class Assess {
 					+ (support ? String.join("; ", m.testSupportReasons()) : "") + " |");
 		}
 		System.out.println();
-		System.out.println(modules.size() + " modules with main sources; outside test support: " + mainTotal + " main-source files, " + testTotal + " test-source files.");
-		System.out.println("Root packages: " + rootPackages(modules));
+		System.out.println(modules.size() + " modules with main sources; in assessment scope: " + mainTotal + " main-source files, " + testTotal + " test-source files.");
+		System.out.println("Root packages: " + rootPackages(measured));
 		System.out.println();
 
 		// Tooling already present
@@ -198,7 +203,6 @@ public class Assess {
 		System.out.println();
 
 		// Decisions
-		Util.Decisions decisions = Util.Decisions.read(target);
 		decisions.print();
 
 		// Question 1: is it already answered here
@@ -213,17 +217,13 @@ public class Assess {
 
 		// Question 2: will it find something
 		List<String> churn = churn(target);
-		Util.Decisions d = decisions;
-		List<Util.Module> measured = modules.stream()
-				.filter(m -> m.testSupportReasons().isEmpty() && d.excludedModules().stream().noneMatch(x -> m.path().equals(x) || m.path().startsWith(x + "/")))
-				.collect(Collectors.toList());
 		PmdMeasure.Summary pmdCost = null;
 		String pmdNote = null;
 		if (quick) {
 			pmdNote = "not measured (--quick)";
 		}
 		else if (measured.isEmpty()) {
-			pmdNote = "no module outside test support to measure";
+			pmdNote = "no selected module to measure";
 		}
 		else {
 			System.out.println("Measuring PMD and CPD over " + measured.size() + " module(s), limit " + timeout + " s...");
@@ -242,7 +242,7 @@ public class Assess {
 		Map<String, String> finds = new LinkedHashMap<>();
 		Map<String, String> cost = new LinkedHashMap<>();
 		finds.put("jacoco", testTotal == 0 ? "**no test sources**: nothing to measure until tests exist"
-				: untested.isEmpty() ? "every module outside test support has tests; the floors protect what is there"
+				: untested.isEmpty() ? "every module in assessment scope has tests; the floors protect what is there"
 						: untested.size() + " module(s) with main code and no tests: " + String.join(", ", untested));
 		cost.put("jacoco", "floors at measured minus 2: no refactoring" + (untested.isEmpty() ? "" : "; tests to write in the untested modules"));
 		finds.put("errorprone", "not predictable from source; on the two proven code bases about 3 real bugs per 130 files, from checks no grep names");
@@ -396,7 +396,7 @@ public class Assess {
 		if (open.contains("jacoco") && testFiles == 0) {
 			order.remove("jacoco");
 			order.add("jacoco");
-			notes.add("no test sources outside test support: coverage goes last, there is nothing to measure until tests exist.");
+			notes.add("no test sources in assessment scope: coverage goes last, there is nothing to measure until tests exist.");
 		}
 		if (open.contains("spotbugs") && concurrencyFiles > 0) {
 			order.remove("spotbugs");

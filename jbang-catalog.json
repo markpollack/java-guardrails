@@ -31,6 +31,10 @@
     "measure-nullaway": {
       "script-ref": "scripts/NullAwayMeasure.java",
       "description": "Inventory JSpecify package defaults and measure unique NullAway findings in report mode; --inventory needs no build, --module scopes the compile"
+    },
+    "pass": {
+      "script-ref": "scripts/Pass.java",
+      "description": "Prepare and validate a local quality pass: preserve the original API, reject introduced findings, resume the same kit version and produce a review report; mode is recorded in decisions.md"
     }
   }
 }

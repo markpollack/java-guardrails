@@ -11,6 +11,21 @@ instead of a conversation: a gate is a command whose exit code is the goal. The 
 and gate; the agent refactors and triages; the owner decides; no intelligence is spent where a
 threshold will do.
 
+## What a pass gives you
+
+Ask your agent to add quality gates. In 0.4.0 it works through a first pass without routine
+policy questions, on a local branch. It preserves published APIs, fixes findings it introduces,
+verifies the checks with deliberate violations, and leaves a report at
+`config/guardrails/report.md` explaining what changed, what remains and how to review or undo it.
+A failed measurement stops the pass with the original diagnostic; missing evidence is never zero.
+Nothing is merged or pushed for you.
+
+To keep policy checkpoints, ask for control mode before starting, or record
+`GUARDRAILS_MODE: control` in `config/guardrails/decisions.md`. Existing answers remain effective.
+Control still adopts API protection, checks for introduced findings, positive coverage floors
+and failure halts. Missing `GUARDRAILS_MODE` means `unattended`; no command-line flag is needed.
+You need JDK 21+ for the full pass. Standalone source and coverage tools still support JDK 17.
+
 ## Status
 
 Each gate answers one question about the code; the order to install them comes from the code
@@ -24,8 +39,8 @@ base's own facts, which `assess` reads (below), not from the table.
 | What must be refactored before the others can see it? | PMD size, complexity and duplication | minutes, then the refactoring; a target, then a gate | **Proven end to end on two code bases**: measured, decided, installed, green, falsified; measured on a third, where the references did not fit (`evidence/agent-journal.md`). |
 | Is the structure drifting? | ArchUnit no-cycles | seconds after compile; every change | **Proven on two code bases**; on the second, gating the cycle-free modules while the core's 13 measured cycles wait for their own session. Layers not yet. |
 | Can null cross a non-null contract? | NullAway, explicit package scope | a compile under JDK 21; every change | Measurement and falsification implemented; see `evidence/nullaway.md` for the scope proven. Optional, outside the default gate order. |
-| | Lincheck | | Outline. |
-| Does the executing test check anything? (advanced) | PIT, scoped | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | Playbook written from one code base's record; a profile, never a gate, never in the order. |
+| Is the configured concurrency model safe? | Lincheck | model dependent | Installation outline; existing configured Java models participate in pass validation. |
+| Does the executing test check anything? (advanced) | PIT, scoped | tens of minutes whole-module, about two scoped; changed classes during work, whole module at acceptance | Optional profile outside the default order; configured mutation contracts participate in pass validation. |
 
 Maven only. A Gradle slice is planned; `measure` already works on Gradle projects, the gate
 install does not.
@@ -43,9 +58,9 @@ logging; quiet output is refused rather than counted as zero.
 
 ## Getting started
 
-You need a JDK 17 or newer (21 or newer for the Error Prone gate), a Maven project with the
-Maven wrapper, and a coding agent that reads Agent Skills (Claude Code, or any of the agents the
-`skills` CLI installs into). Nothing else: not JBang, not Node, not Python.
+You need JDK 21 or newer, a Maven project with the Maven wrapper, and a coding agent that reads
+Agent Skills (Claude Code, or an agent supported by the `skills` CLI). The kit bundles its JBang
+launcher. The `npx` install option below also needs Node.js; cloning or the plugin install does not.
 
 1. **Install the kit as a skill.** In Claude Code:
 
@@ -63,13 +78,11 @@ Maven wrapper, and a coding agent that reads Agent Skills (Claude Code, or any o
 
    > install quality gates on this project
 
-   The agent runs `assess`, which works out for each gate whether the build already enforces
-   it, whether it will find something, and what going green costs (it measures PMD and
-   CPD itself, in seconds on the code bases tried), prints the gate order with a reason per
-   move, records it, and names the first gate. Then it follows that
-   gate's playbook: measurement, a `STOP` block or two (a notification it records and goes on
-   from, or a decision it waits for), the gate in report mode, the refactoring until
-   `./mvnw verify` is green. Say "the next gate" for each one after.
+   The agent creates a local worktree, establishes the starting API and findings, then runs
+   assessment and follows the gate order. It fixes one hotspot at a time, fully rechecks it,
+   and commits only verified candidates. The final report tells you what to review and what
+   remains. To reserve code for later work, name the classes or methods to leave untouched;
+   they remain measured. See [the pass procedure](playbooks/01-pass.md) for scope and resume.
 
 3. **Try the measurement by hand first, if you prefer.** Clone the kit anywhere and point it at
    your project; it changes nothing:
@@ -86,60 +99,38 @@ own, a decisions file, a few lines in your pom, and the refactoring commits.
 
 ## What happens when you use it
 
-You install the kit as a skill in your coding agent, open a Maven project, and ask for quality
-gates. The agent then follows `playbooks/00-assess.md` and the playbook of the gate it names:
+The agent follows [the pass procedure](playbooks/01-pass.md), then each gate's playbook:
 
-1. **Assess.** A script inventories the project: modules, test-support modules, Java level,
-   tooling already in the build. For each gate it then says whether the build already enforces
-   it (absent, reporting, or gating), whether it will find something (tests per module,
-   concurrency primitives, the measured PMD and CPD cost), and what going green costs, and it
-   prints the gate order with the reason for each move. No build is run. The order is
-   recorded as `GATE_ORDER` and every later run names the next gate from it.
-2. **Measure.** A script computes every metric the gate will enforce for every method, class
-   and lambda, and prints the distribution, the worst cases by name, and the cost at the
-   kit's threshold: how many fail, and whether the threshold fits this code base.
-3. **You decide, when there is a decision.** The script ends with one `STOP` block per
-   answer it needs, with the data, the options, a recommendation and the line to record. A
-   block marked `notify` is the kit's own default from unambiguous data (coverage floors at
-   measured minus 2, the gate order): the agent records it, shows it to you, and goes on. A
-   block marked `decide` is relayed as written, and the agent waits:
+1. **Establish the start.** Create a local branch and record the original API and findings.
+   Resolve test-support and publication scope before calculating costs or floors.
+2. **Choose the order.** Assessment uses existing tooling, tests, concurrency and measured
+   complexity to schedule the gates. All required checks still participate in every validation.
+3. **Apply recorded choices or defaults.** Unattended mode records routine policy choices with
+   their reasons and continues. Control mode presents unanswered choices and waits. Both modes
+   stop on incomplete measurements; neither can excuse a finding introduced by the pass.
+4. **Fix and enforce.** Write missing own-module tests, fix mechanically safe findings and install
+   checks with measured thresholds. Preserve published API and any reserved declarations.
+   Narrow exceptions for inherited API-blocked compiler findings remain visible in measurement.
+5. **Prove each change.** Remeasure every required check, compare the API, run the build and plant
+   deliberate violations before accepting a hotspot commit. Full validation can take minutes;
+   the run records its wall time.
+   Resolve published modules as an external consumer would, too: dependency version changes
+   require a recorded reason, even when the project's own build remains green.
+6. **Review the result.** The final report states what is enforced, what changed, what remains,
+   and which commits to review or undo. You decide what to merge. Nothing is pushed for you.
 
-   ```
-   STOP PMD_MECHANISM (decide)
-     Kind: decide. Relay this block as written and do not proceed until the owner answers.
-     Cost of going green in the measured modules: 57 PMD violations and 33 CPD blocks.
-       mcp-core: 57 PMD
-     Options: (a) fix-all: every violation fixed in the code, one hotspot per commit
-              (b) ratchet: pmd.maxAllowedViolations at today's count per module, lowered as fixes land; CPD stays at zero
-              (c) scope: gate the listed modules first, the rest later
-     Recommendation: (a), the count is below 100
-     Record as:  PMD_MECHANISM: fix-all
-   ```
-
-   Your answers go into `config/guardrails/decisions.md` in your project. A re-run never
-   re-asks; changing a decision is an edit to that file.
-4. **Install in report mode.** The agent copies `config/pmd/ruleset.xml` into your project
-   (every threshold has its reason beside it; you own the file) and adds the plugin block to
-   your root pom.
-5. **Falsify.** A script plants a violation, runs the gate, and passes only if the build went
-   red and the report names the plant. A gate that never failed may be checking nothing.
-6. **Go green.** The agent fixes violations in the code, one hotspot per commit with your tests
-   green after each. Never a baseline file, never a suppression comment. A false positive is
-   excluded by a written structural rule in the ruleset, and only after you said so.
-7. **Flip to fail.** `./mvnw verify` now fails on any violation, and that is the target every
-   later change is held to.
-
-What lands in your repository: `config/pmd/ruleset.xml`, `config/guardrails/decisions.md`,
-three properties and one plugin block in the root pom, and the refactoring commits.
+Your branch carries the gate configuration, fixes, `config/guardrails/decisions.md` and
+`config/guardrails/report.md`. Detailed measurements stay in an ignored local directory.
+See the pass procedure for control-mode STOP blocks, exact hands-off selectors and resume rules.
 
 On the MCP Java SDK this took the core module from 57 violations and 33 duplicate blocks to
 zero in 27 commits, with the worst method going from cognitive complexity 59 to 4.
 
 ## Install
 
-Prerequisites: a JDK 17 or newer (21 or newer for the Error Prone gate and its measure) and a Maven project with the Maven wrapper (`mvnw`). The kit's
-scripts are Java, run through a bundled JBang wrapper that resolves its own dependencies on
-first run. Nothing else is needed, not JBang, not Node, not Python.
+Prerequisites: JDK 21+ for a full pass and a Maven project with the Maven wrapper (`mvnw`).
+Standalone source and coverage tools support JDK 17. The bundled JBang wrapper resolves Java
+dependencies on first run; no separate JBang installation is needed.
 
 The repository is an [Agent Skill](https://agentskills.io): `SKILL.md` at the root with the
 scripts, configs, playbooks and evidence beside it. Any of these puts the same directory where

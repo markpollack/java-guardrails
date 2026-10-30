@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — Unreleased
+
+- Default to an unattended local first pass; retain `GUARDRAILS_MODE: control` for policy checkpoints. Both modes preserve published APIs, reject introduced findings and halt on incomplete measurement.
+- Compare original public/protected API artifacts with pinned japicmp, including external ancestry; fully remeasure each hotspot with rule-and-declaration multiset attribution.
+- Preserve consumer dependency closures from actual publication POMs; reject unrecorded version changes, including changes caused solely by Maven dependency ordering. List exact reasoned exceptions in the final report.
+- Keep run evidence locally ignored; preserve the original start across same-version resume and produce a maintainer-facing review report.
+- Honor test-support scope in assessment costs, require own-module tests and positive coverage floors, and keep inherited compiler exceptions visible in scratch measurement.
+- Package sibling test-jar contracts before coverage, bytecode analysis and source-gate plants; preserve original diagnostics and allow a failed baseline to retry from the immutable start.
+
 ## 0.3.3 — 2026-10-30
 
 - Handle nonempty single-package modules in ArchUnit measurement and copied gates. Include root packages in package-cycle checks, retain class-cycle checks and the nonempty-import assertion, and fail measurement on missing or empty compiled classes.

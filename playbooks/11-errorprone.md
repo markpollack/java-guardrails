@@ -33,18 +33,17 @@ profile with a reason in `configs/errorprone/disabled-checks.txt`; a real except
    Javadoc checks and some bug finders untagged alike). javac's own warnings appear as
    `javac:removal`, `javac:deprecation`, `javac:unchecked`, `javac:classpath`: the gate's
    `-Werror` fails on them too.
-4. **Stop** — `ERRORPRONE_DISABLED`: for every style or untagged check with findings, fix or
-   disable by name. The recommendation is computed: disable when more than 10 findings and not
-   a bug finder, fix otherwise. The answer is one line in `config/guardrails/decisions.md`.
+4. **Notify** — `ERRORPRONE_DISABLED: none` is the default for new decisions. Fix mechanically
+   safe findings, including frequent style checks. Preserve existing explicit decisions; a count
+   never justifies disabling a check. Inherited API-blocked findings follow the narrow member
+   exception policy in `01-pass.md` and remain visible in full pass measurement.
 5. **AI** — go green, in this order:
    1. javac's own warnings first. Until they are gone, javac under `-Werror` stops before Error
       Prone runs, so nothing else can be checked. A use of an API marked for removal is a real
       finding; a missing class on the compile classpath is a dependency to declare.
-   2. Each **bug** finding fixed in the code, red-first where a test can show it; a
-      `@SuppressWarnings("<Check>")` with the reason on the line only where the finding is the
-      code's intent (the stdio transport that owns `System.out`).
-   3. Each disabled check added to the profile as `-Xep:<Check>:OFF` and to
-      `disabled-checks.txt` with its reason; each remaining style finding fixed.
+   2. Each **bug** finding fixed in the code, red-first where a test can show it; a named member exception only for an inherited API-blocked finding under `01-pass.md`.
+   3. Each mechanically safe style finding fixed, regardless of count. Do not change a published
+      supertype, bean return descriptor or TCK field type to clear a removal warning.
    One check per commit, tests green after each, counts in the body.
 6. **Script** — `./jbang falsify <target> errorprone`: plants a dropped `new Exception(...)`
    (`DeadException`, ERROR by default), compiles the module under the profile, and passes only
@@ -66,3 +65,5 @@ profile with a reason in `configs/errorprone/disabled-checks.txt`; a real except
   reasons on the SDK (42 and 20 findings).
 - **`System.out` in a stdio transport** is the one legitimate `SystemOut`: a suppression with
   the reason, on that line.
+
+Historical disable-by-frequency examples below describe earlier runs, not the 0.4.0 default.

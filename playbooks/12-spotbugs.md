@@ -61,3 +61,5 @@ was never written.
   synchronized code.
 - **The long tail is almost all `EI_EXPOSE_REP*`** (rank 18): records returning the lists and
   maps they hold. 263 of 283 on the SDK core. Advice, not gated.
+
+In 0.4.0, follow `01-pass.md` for policy. A generic SpotBugs count ratchet is not implemented; do not claim one is working. Fix findings or use a proven narrow exclusion with its reason.

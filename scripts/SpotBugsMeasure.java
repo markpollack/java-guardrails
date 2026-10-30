@@ -120,9 +120,9 @@ public class SpotBugsMeasure {
 			System.out.println(Util.stopHeader("SPOTBUGS_MECHANISM", true));
 			System.out.print(Util.kindLine(true));
 			System.out.println("  " + atGate.size() + " findings at the gate, more than " + FIX_LIMIT + ".");
-			System.out.println("  Options: (a) fix-all now   (b) ratchet: spotbugs.maxAllowedViolations at today's count, lowered as fixes land");
-			System.out.println("  Recommendation: (b)");
-			System.out.println("  Record as:  SPOTBUGS_MECHANISM: fix-all\n          or  SPOTBUGS_MECHANISM: ratchet");
+			System.out.println("  Options: fix-all now, or a proven narrow false-positive exclusion with a reason. No generic SpotBugs count ratchet is implemented.");
+			System.out.println("  Recommendation: fix-all within the frozen API and hands-off constraints; report blocked scope if no honest enforcement is possible.");
+			System.out.println("  Record as:  SPOTBUGS_MECHANISM: fix-all");
 			System.out.println("```");
 		}
 		else {
@@ -146,14 +146,14 @@ public class SpotBugsMeasure {
 		return "";
 	}
 
-	/** Runs compile + spotbugs:spotbugs with the given include filter (null: the gate's) and reads every gated module's report. */
+	/** Packages reactor artifacts (including filtered test-jars), then analyses each gated module. */
 	static List<Finding> analyse(Path target, List<Util.Module> gated, Path includeFilter, String label) throws Exception {
 		List<String> command = Util.maven(target, "spotbugs", "");
 		command.addAll(List.of("-q", "-DskipTests"));
 		if (includeFilter != null) {
 			command.add("-Dspotbugs.includeFilterFile=" + includeFilter);
 		}
-		command.addAll(List.of("clean", "compile", "spotbugs:spotbugs"));
+		command.addAll(List.of("clean", "package", "spotbugs:spotbugs"));
 		System.out.println("Running (" + label + "): " + String.join(" ", command));
 		StringBuilder out = new StringBuilder();
 		int exit = run(target, command, out);
