@@ -1,5 +1,6 @@
 // Template: replace {{ROOT_PACKAGE}} with the module's root package (the common prefix of its
-// packages, which `measure-archunit` prints). Drop the result into the module's test sources.
+// packages, which `measure-archunit` prints), or any valid test package when no common named
+// package exists. This names the test's package, not an import filter. Drop into test sources.
 // Uses ArchUnit as a plain library (`com.tngtech.archunit:archunit`, test scope) from an ordinary
 // JUnit test, not ArchUnit's JUnit engine: the engine pins a JUnit Platform version, which
 // collided with JUnit 6 on the MCP SDK. Imports the module's own compiled main classes, not a
@@ -28,6 +29,20 @@ class NoCyclesTest {
 		.importPath(java.nio.file.Files.isDirectory(java.nio.file.Path.of("target", "classes")) ? java.nio.file.Path.of("target", "classes")
 				: java.nio.file.Path.of("build", "classes", "java", "main"));
 
+	/** All imported packages participate, including the root itself and the default package. */
+	private static final SliceAssignment PACKAGE = new SliceAssignment() {
+		@Override
+		public SliceIdentifier getIdentifierOf(JavaClass javaClass) {
+			String name = javaClass.getPackageName();
+			return SliceIdentifier.of(name.isEmpty() ? "<default package>" : name);
+		}
+
+		@Override
+		public String getDescription() {
+			return "packages";
+		}
+	};
+
 	/** Every top-level class is a slice; its nested classes belong to it. */
 	private static final SliceAssignment TOP_LEVEL_CLASS = new SliceAssignment() {
 		@Override
@@ -47,10 +62,10 @@ class NoCyclesTest {
 		assertFalse(CLASSES.isEmpty(), "no classes imported for {{ROOT_PACKAGE}}: is the test running from the module directory with main classes compiled?");
 	}
 
-	/** Every package under the root is a slice; a cycle between any two fails. */
+	/** Every imported package is a slice; a cycle between any two fails. */
 	@Test
 	void noPackageCycles() {
-		slices().matching("{{ROOT_PACKAGE}}.(**)").should().beFreeOfCycles().check(CLASSES);
+		slices().assignedFrom(PACKAGE).should().beFreeOfCycles().check(CLASSES);
 	}
 
 	/** A cycle between classes of one package fails. */

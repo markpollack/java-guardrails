@@ -42,6 +42,20 @@ public class ArchUnitMeasure {
 
 	static final int FIX_LIMIT = 5;
 
+	/** Every imported package is a slice, including the root itself and the default package. */
+	static final SliceAssignment PACKAGE = new SliceAssignment() {
+		@Override
+		public SliceIdentifier getIdentifierOf(JavaClass javaClass) {
+			String name = javaClass.getPackageName();
+			return SliceIdentifier.of(name.isEmpty() ? "<default package>" : name);
+		}
+
+		@Override
+		public String getDescription() {
+			return "packages";
+		}
+	};
+
 	/** Every top-level class is a slice; its nested classes belong to it. */
 	static final SliceAssignment TOP_LEVEL_CLASS = new SliceAssignment() {
 		@Override
@@ -101,23 +115,22 @@ public class ArchUnitMeasure {
 		for (Util.Module m : gated) {
 			Path classesDir = m.dir().resolve("target").resolve("classes");
 			if (!Files.isDirectory(classesDir)) {
-				continue;
+				throw new IOException("measure-archunit: no classes imported for " + m.path() + ": missing " + classesDir);
 			}
 			JavaClasses classes = new ClassFileImporter().importPath(classesDir);
+			if (classes.isEmpty()) {
+				throw new IOException("measure-archunit: no classes imported for " + m.path() + " from " + classesDir + "; measurement is incomplete");
+			}
 			Set<String> packages = new TreeSet<>();
 			classes.forEach(c -> packages.add(c.getPackageName()));
-			packages.remove("");
-			if (packages.isEmpty()) {
-				continue;
-			}
 			String root = commonPrefix(packages);
-			ArchRule noPackageCycles = SlicesRuleDefinition.slices().matching(root + ".(**)").should().beFreeOfCycles();
+			ArchRule noPackageCycles = SlicesRuleDefinition.slices().assignedFrom(PACKAGE).should().beFreeOfCycles();
 			ArchRule noClassCycles = SlicesRuleDefinition.slices().assignedFrom(TOP_LEVEL_CLASS).should().beFreeOfCycles();
 			List<Cycle> pkg = evaluate(noPackageCycles, classes, m.path(), "package");
 			List<Cycle> cls = evaluate(noClassCycles, classes, m.path(), "class");
 			cycles.addAll(pkg);
 			cycles.addAll(cls);
-			System.out.println("| " + m.path() + " | " + classes.size() + " | " + root + " | " + packages.size() + " | " + pkg.size() + " | " + cls.size() + " |");
+			System.out.println("| " + m.path() + " | " + classes.size() + " | " + (root.isEmpty() ? "(no common named package)" : root) + " | " + packages.size() + " | " + pkg.size() + " | " + cls.size() + " |");
 		}
 		System.out.println();
 
@@ -184,7 +197,7 @@ public class ArchUnitMeasure {
 			}
 			keep = i;
 		}
-		return String.join(".", java.util.Arrays.copyOf(first, Math.max(keep, 1)));
+		return String.join(".", java.util.Arrays.copyOf(first, keep));
 	}
 
 	static int intOption(String[] args, String name, int dflt) {

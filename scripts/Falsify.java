@@ -202,10 +202,12 @@ public class Falsify {
 					.filter(d -> { try (Stream<Path> f = Files.list(d)) { return f.anyMatch(x -> x.toString().endsWith(".java") && !x.getFileName().toString().startsWith("module-info")); } catch (IOException e) { return false; } })
 					.sorted().limit(2).collect(java.util.stream.Collectors.toList());
 		}
-		if (packageDirs.size() < 2) {
-			System.out.println("falsify archunit: the module has fewer than two packages; nothing to cycle");
+		if (packageDirs.isEmpty()) {
+			System.out.println("falsify archunit: the module has no main-source package to plant in");
 			System.exit(2);
 		}
+		// A single package still has a class-cycle gate: plant both classes there.
+		if (packageDirs.size() == 1) packageDirs = List.of(packageDirs.get(0), packageDirs.get(0));
 		String pkgA = sourceRoot.relativize(packageDirs.get(0)).toString().replace(java.io.File.separatorChar, '.');
 		String pkgB = sourceRoot.relativize(packageDirs.get(1)).toString().replace(java.io.File.separatorChar, '.');
 		Path a = packageDirs.get(0).resolve("GuardrailsPlantedA.java");
@@ -214,8 +216,8 @@ public class Falsify {
 		int exit;
 		StringBuilder output = new StringBuilder();
 		try (Plant planted = new Plant("falsify archunit", target)) {
-			planted.create(a, "package " + pkgA + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedA {\n\tstatic Object other() {\n\t\treturn new " + pkgB + ".GuardrailsPlantedB();\n\t}\n}\n");
-			planted.create(b, "package " + pkgB + ";\n\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedB {\n\tstatic Object other() {\n\t\treturn " + pkgA + ".GuardrailsPlantedA.class;\n\t}\n}\n");
+			planted.create(a, (pkgA.isEmpty() ? "" : "package " + pkgA + ";\n") + "\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedA {\n\tstatic Object other() {\n\t\treturn new " + (pkgB.isEmpty() ? "" : pkgB + ".") + "GuardrailsPlantedB();\n\t}\n}\n");
+			planted.create(b, (pkgB.isEmpty() ? "" : "package " + pkgB + ";\n") + "\n// planted by java-guardrails falsify: must never be committed\npublic class GuardrailsPlantedB {\n\tstatic Object other() {\n\t\treturn " + (pkgA.isEmpty() ? "" : pkgA + ".") + "GuardrailsPlantedA.class;\n\t}\n}\n");
 			List<String> command = Util.maven(target, "archunit", target.equals(module) ? "." : target.relativize(module).toString());
 			command.addAll(List.of("-Dtest=NoCyclesTest", "-Dsurefire.failIfNoSpecifiedTests=false", "clean", "test"));
 			System.out.println("falsify: " + String.join(" ", command));
