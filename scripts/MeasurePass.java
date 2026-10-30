@@ -29,13 +29,15 @@ public class MeasurePass {
             script("SourceSnapshot.java",scratch.toString(),output.resolve("pmd.json").toString());
             // One fresh compilation supplies compiler diagnostics, tests, coverage, bytecode
             // analysis and API artifacts. Overlays are reporting-only and remain in scratch.
-            compiler();spotbugs();
+            compiler();spotbugs();scopeBuild();
             List<String> build=maven("errorprone");
             build.remove("-Djacoco.skip=true");build.remove("-Dspotbugs.skip=true");
             build.addAll(List.of("-X","-Derrorprone.failOnWarning=false","-Derrorprone.extraArgs=-XepAllErrorsAsWarnings -XepIgnoreSuppressionAnnotations",
-                "-Dspotbugs.skip=false","clean","org.jacoco:jacoco-maven-plugin:0.8.15:prepare-agent","package",
+                "-Dspotbugs.includeFilterFile="+scratch.resolve(".guardrails-spotbugs-all.xml"),"-Dspotbugs.excludeFilterFile="+scratch.resolve(".guardrails-spotbugs-none.xml"),
+                "-Dspotbugs.skip=false","clean","org.jacoco:jacoco-maven-plugin:0.8.15:prepare-agent","verify",
                 "org.jacoco:jacoco-maven-plugin:0.8.15:report","com.github.spotbugs:spotbugs-maven-plugin:4.9.8.5:spotbugs",
                 "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath","-Dmdep.outputFile=target/guardrails-api-classpath.txt"));
+            for(String property:List.of("includeFilterFiles","excludeFilterFiles","excludeBugsFile","excludeBugsFiles","onlyAnalyze","visitors","omitVisitors","chooseVisitors","userPrefs"))build.add("-Dspotbugs."+property+"=");
             if(plan!=null&&!plan.full())build.addAll(List.of("-pl",String.join(",",plan.modules()),"-am"));
             else build.addAll(List.of("org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom","-Doutput="+output.resolve("reactor-model.xml")));
             System.out.println("Validation: compile, test and analyze shared outputs");
@@ -65,7 +67,7 @@ public class MeasurePass {
             }
             preserveRaw();
             Files.writeString(output.resolve("elapsed-millis.txt"),Long.toString((System.nanoTime()-start)/1_000_000)+"\n");
-            System.out.println("Full measurement complete: "+output);
+            System.out.println((plan!=null&&!plan.full()?"Scoped measurement complete (unchanged modules reused with diff proof): ":"Full measurement complete: ")+output);
         }catch(Exception e){
             String message=Run.defect(target,kit,output,e);
             Files.writeString(output.resolve("defect.md"),message);System.err.println(message);System.exit(2);
@@ -92,6 +94,23 @@ public class MeasurePass {
         try(var paths=Files.walk(scratch)){for(Path pom:paths.filter(file->file.getFileName().toString().equals("pom.xml")&&!Util.isBuildOutput(scratch.relativize(file))).toList())originalPoms.put(pom,Files.readString(pom));}
     }
     static void restorePoms()throws Exception{for(var entry:originalPoms.entrySet())Files.writeString(entry.getKey(),entry.getValue());}
+    static void scopeBuild()throws Exception{
+        if(plan==null||plan.full())return;
+        // -am supplies current packaged upstream dependencies (including filtered test-jars).
+        // Unchanged upstream modules do not need their tests or analyzers rerun. Their
+        // accepted measurements are reused; selected modules and dependents run normally.
+        for(var module:Util.modules(scratch))if(!plan.modules().contains(module.path())){
+            Path pom=module.dir().resolve("pom.xml");Document doc=Xml.read(pom);Element project=doc.getDocumentElement();
+            Element props=Xml.ensure(project,"properties");Xml.set(props,"skipTests","true");Xml.set(props,"skipITs","true");Xml.set(props,"jacoco.skip","true");
+            Element plugins=Xml.ensure(Xml.ensure(project,"build"),"plugins");
+            for(String artifact:List.of("maven-surefire-plugin","maven-failsafe-plugin","spotbugs-maven-plugin")){
+                Element plugin=Xml.children(plugins,"plugin").stream().filter(p->Xml.text(p,"artifactId").equals(artifact)).findFirst().orElse(null);
+                if(plugin==null){plugin=doc.createElement("plugin");plugins.appendChild(plugin);Xml.set(plugin,"groupId",artifact.startsWith("spotbugs")?"com.github.spotbugs":"org.apache.maven.plugins");Xml.set(plugin,"artifactId",artifact);}
+                Xml.set(Xml.ensure(plugin,"configuration"),artifact.startsWith("spotbugs")?"skip":"skipTests","true");
+            }
+            Xml.write(doc,pom);
+        }
+    }
     static void preserveRaw()throws Exception{
         Path raw=output.resolve("raw");
         try(var paths=Files.walk(scratch)){
@@ -105,6 +124,9 @@ public class MeasurePass {
     }
     static void run(List<String> command,Path cwd,Path log)throws Exception{Run.checked(command,cwd,log);}
     static void spotbugs()throws Exception{
+        Path includeAll=scratch.resolve(".guardrails-spotbugs-all.xml"),none=scratch.resolve(".guardrails-spotbugs-none.xml");
+        Files.copy(kit.resolve("configs/spotbugs/spotbugs-include-all.xml"),includeAll);
+        Files.writeString(none,"<FindBugsFilter/>\n");
         Document doc=Xml.read(scratch.resolve("pom.xml"));Element plugins=Xml.ensure(Xml.ensure(doc.getDocumentElement(),"build"),"plugins");
         for(Element e:Xml.children(plugins,"plugin"))if(Xml.text(e,"artifactId").equals("spotbugs-maven-plugin"))plugins.removeChild(e);
         Element plugin=doc.createElement("plugin");plugins.appendChild(plugin);Xml.set(plugin,"groupId","com.github.spotbugs");Xml.set(plugin,"artifactId","spotbugs-maven-plugin");Xml.set(plugin,"version","4.9.8.5");
@@ -119,6 +141,18 @@ public class MeasurePass {
                 Xml.set(entry,"version","4.9.8.5");Element prior=Xml.child(entry,"configuration");if(prior!=null)entry.removeChild(prior);
                 Element settings=Xml.ensure(entry,"configuration");settings.setAttribute("combine.self","override");
                 Xml.set(settings,"effort","Max");Xml.set(settings,"threshold","Medium");Xml.set(settings,"maxRank","20");Xml.set(settings,"xmlOutput","true");Xml.set(settings,"includeTests","false");Xml.set(settings,"failOnError","true");Xml.set(settings,"skip","false");
+                // An omitted element falls back to the plugin's Maven user property.
+                // Explicit neutral files prevent enforcement filters leaking into measurement.
+                Xml.set(settings,"includeFilterFile",includeAll.toString());Xml.set(settings,"excludeFilterFile",none.toString());
+                // The reporting overlay includes inherited bugs outside enforcement filters.
+                // Do not run a filtered gate against this unfiltered report. The ordinary
+                // gate is verified separately at boundaries; findings comparisons enforce
+                // intermediate changes. JaCoCo floors and ordinary tests still run in verify.
+                Element executions=Xml.child(entry,"executions");
+                if(executions!=null)for(Element execution:Xml.children(executions,"execution")){
+                    Element goals=Xml.child(execution,"goals");
+                    if(goals!=null&&Xml.children(goals,"goal").stream().anyMatch(g->g.getTextContent().trim().equals("check")))executions.removeChild(execution);
+                }
                 var deps=entry.getElementsByTagName("dependency");for(int j=0;j<deps.getLength();j++){Element dep=(Element)deps.item(j);if(Xml.text(dep,"artifactId").equals("spotbugs"))Xml.set(dep,"version","4.10.4");}
             }
             if(changed)Xml.write(model,pom);

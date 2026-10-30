@@ -18,8 +18,13 @@ public class ApiInventoryCheck {
         Path kit=Path.of(args[2]),out=Path.of(args[3]);Files.createDirectories(out);boolean failed=false,incomplete=false;
         for(int i=0;i<old.size();i++){
             var a=old.get(i);var b=now.get(i);String name=a.module().replace('/','_');Path log=out.resolve(name+".log");
-            var cmd=List.of(kit.resolve("jbang").toString(),kit.resolve("scripts/ApiCheck.java").toString(),a.jar(),b.jar(),a.classpath(),b.classpath(),out.resolve(name+".xml").toString());
-            int exit=Run.logged(cmd,out,log);
+            // One JVM for the inventory; each comparison still gets independent japicmp
+            // inputs/class pools and a complete per-module diagnostic report.
+            int exit;var stdout=System.out;var stderr=System.err;
+            try(var stream=new java.io.PrintStream(Files.newOutputStream(log))){
+                System.setOut(stream);System.setErr(stream);
+                exit=ApiCheck.compare(new String[]{a.jar(),b.jar(),a.classpath(),b.classpath(),out.resolve(name+".xml").toString()});
+            }finally{System.setOut(stdout);System.setErr(stderr);}
             System.out.println(a.module()+": "+(exit==0?"unchanged":"FAILED; "+log));if(exit!=0){System.err.print(Files.readString(log));failed=true;}
             if(exit!=0&&exit!=1)incomplete=true;
         }

@@ -22,11 +22,14 @@ public class ApiCheck {
             System.out.println("Usage: ApiCheck.java OLD.jar NEW.jar OLD-classpath.txt NEW-classpath.txt REPORT.xml\nCompares protected/public API using japicmp 0.26.5. Classpaths are required, platform-separated. Exit 1: changed API; exit 2: incomplete comparison. No exclusions or missing-class overrides.");
             return;
         }
+        System.exit(compare(args));
+    }
+    static int compare(String[] args) throws Exception {
         if (args.length != 5) throw new IllegalArgumentException("Use --help for arguments");
         try {
             String oldcp = classpath(Path.of(args[2])), newcp = classpath(Path.of(args[3]));
             if (!Objects.equals(moduleDescriptor(Path.of(args[0])), moduleDescriptor(Path.of(args[1])))) {
-                System.err.println("API changed: published module descriptor");System.exit(1);
+                System.err.println("API changed: published module descriptor");return 1;
             }
             Path oldApi=visiblePackages(Path.of(args[0])),newApi=visiblePackages(Path.of(args[1]));
             Path oldInherited = inherited(oldApi, oldcp);
@@ -38,17 +41,18 @@ public class ApiCheck {
             for(int i=0;i<elements.getLength();i++){
                 var element=(org.w3c.dom.Element)elements.item(i);
                 if(element.hasAttribute("changeStatus")&&!element.getAttribute("changeStatus").equals("UNCHANGED")){
-                    System.err.println("API changed: retained shape metadata ("+element.getTagName()+"); see "+args[4]);System.exit(1);
+                    System.err.println("API changed: retained shape metadata ("+element.getTagName()+"); see "+args[4]);return 1;
                 }
             }
             System.out.println("API unchanged (japicmp 0.26.5, public/protected including synthetic members)");
+            return 0;
         } catch (JApiCmpException e) {
             boolean changed = e.getReason() == JApiCmpException.Reason.IncompatibleChange;
             System.err.println((changed ? "API changed: " : "API incomplete: ") + e.getMessage());
-            System.exit(changed ? 1 : 2);
+            return changed ? 1 : 2;
         } catch (Exception e) {
             System.err.println("API incomplete: " + e.getMessage());
-            System.exit(2);
+            return 2;
         }
     }
     static ModuleDescriptor moduleDescriptor(Path artifact)throws Exception{

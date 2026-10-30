@@ -12,6 +12,7 @@ public class ConsumerSnapshot {
  static final Gson JSON=new GsonBuilder().setPrettyPrinting().create();
  record Module(String publication,SortedMap<String,String> dependencies){}
  record Snapshot(int schema,String profiles,boolean complete,List<Module> modules){}
+ record Pending(Path directory,String publication,String version){}
  record Change(String publication,String dependency,String before,String after,String reason){}
  public static void main(String[] args)throws Exception {
   if(args.length==1&&args[0].equals("--help")){System.out.println("ConsumerSnapshot.java capture SCRATCH_TARGET OUTPUT PRIVATE_MAVEN_REPO | compare START_JSON CURRENT_JSON DECISIONS REPORT_JSON\nCapture runs package and local install in scratch only, never deploy. Consumers have no parent or BOM. Exit 1 means unrecorded dependency change; 2 means incomplete evidence.");return;}
@@ -66,7 +67,7 @@ public class ConsumerSnapshot {
   Run.checked(command,target,log);
   Element root=Xml.read(effective).getDocumentElement();List<Element> projects=root.getTagName().equals("project")?List.of(root):Xml.children(root,"project");
   if(projects.isEmpty())throw new IllegalStateException("No effective reactor models");
-  String buildLog=Files.readString(log);List<Module> modules=new ArrayList<>();Set<String> publications=new HashSet<>();int index=0;
+  List<Pending> pending=new ArrayList<>();String buildLog=Files.readString(log);List<Module> modules=new ArrayList<>();Set<String> publications=new HashSet<>();int index=0;
   for(Element project:projects){
    String group=Xml.text(project,"groupId"),artifact=Xml.text(project,"artifactId"),version=Xml.text(project,"version"),packaging=Xml.text(project,"packaging");if(packaging.isEmpty())packaging="jar";
    String gav=group+":"+artifact+":"+version;if(gav.contains("${")||group.isBlank()||artifact.isBlank()||version.isBlank())throw new IllegalStateException("Unresolved publication coordinates: "+gav);
@@ -88,17 +89,30 @@ public class ConsumerSnapshot {
     if(!publications.add(publication))throw new IllegalStateException("Duplicate publication "+publication);
     Path consumer=output.resolve("consumers/"+index++);Files.createDirectories(consumer);copyWrapper(target,consumer);
     String dependency="<groupId>"+escape(group)+"</groupId><artifactId>"+escape(artifact)+"</artifactId><version>"+escape(version)+"</version><type>"+packaging+"</type>"+(classifier.isEmpty()?"":"<classifier>"+escape(classifier)+"</classifier>");
-    Files.writeString(consumer.resolve("pom.xml"),"<project><modelVersion>4.0.0</modelVersion><groupId>guardrails.consumer</groupId><artifactId>probe</artifactId><version>1</version><dependencies><dependency>"+dependency+"</dependency></dependencies></project>");
-    Files.writeString(consumer.resolve("settings.xml"),"<settings/>");Path tree=consumer.resolve("tree.json");
-    Run.checked(List.of(Util.mvnw(consumer),"-B","-Dstyle.color=never","-s",consumer.resolve("settings.xml").toString(),"-gs",consumer.resolve("settings.xml").toString(),"-Dmaven.repo.local="+repo,"org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree","-DoutputType=json","-DoutputFile="+tree),consumer,consumer.resolve("resolve.log"));
-    String resolution=Files.readString(consumer.resolve("resolve.log"));
-    boolean missingMetadata=resolution.lines().map(s->s.toLowerCase(Locale.ROOT)).anyMatch(s->s.contains("[warning]")&&(s.contains("pom")||s.contains("descriptor"))&&(s.contains("missing")||s.contains("invalid")||s.contains("could not")||s.contains("failed")));
-    if(missingMetadata){System.err.print(resolution);throw new IllegalStateException("Consumer dependency metadata incomplete for "+publication+"; Maven omitted transitive information despite exit 0. See "+consumer.resolve("resolve.log"));}
+    Files.writeString(consumer.resolve("pom.xml"),"<project><modelVersion>4.0.0</modelVersion><groupId>guardrails.consumer</groupId><artifactId>probe-"+index+"</artifactId><version>1</version><dependencies><dependency>"+dependency+"</dependency></dependencies></project>");
+    pending.add(new Pending(consumer,publication,version));
+   }
+  }
+  Path group=output.resolve("consumers");copyWrapper(target,group);
+  Files.writeString(group.resolve("settings.xml"),"<settings/>");
+  StringBuilder aggregator=new StringBuilder("<project><modelVersion>4.0.0</modelVersion><groupId>guardrails.consumer</groupId><artifactId>inventory</artifactId><version>1</version><packaging>pom</packaging><modules>");
+  for(Pending item:pending)aggregator.append("<module>").append(item.directory().getFileName()).append("</module>");
+  Files.writeString(group.resolve("pom.xml"),aggregator.append("</modules></project>").toString());
+  // Aggregation does not imply inheritance. Every probe has its own coordinates and
+  // no parent/BOM, so one Maven invocation preserves independent consumer mediation.
+  Path resolutionLog=output.resolve("consumer-resolution.log");
+  Run.checked(List.of(Util.mvnw(group),"-B","-Dstyle.color=never","-s",group.resolve("settings.xml").toString(),"-gs",group.resolve("settings.xml").toString(),"-Dmaven.repo.local="+repo,
+      "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree","-DoutputType=json","-DoutputFile=tree.json"),group,resolutionLog);
+  String resolution=Files.readString(resolutionLog);
+  boolean missingMetadata=resolution.lines().map(s->s.toLowerCase(Locale.ROOT)).anyMatch(s->s.contains("[warning]")&&(s.contains("pom")||s.contains("descriptor"))&&(s.contains("missing")||s.contains("invalid")||s.contains("could not")||s.contains("failed")));
+  if(missingMetadata){System.err.print(resolution);throw new IllegalStateException("Consumer dependency metadata incomplete; Maven omitted transitive information despite exit 0. See "+resolutionLog);}
+  for(Pending item:pending){
+    Path consumer=item.directory(),tree=consumer.resolve("tree.json");String publication=item.publication(),version=item.version();
+    Files.copy(resolutionLog,consumer.resolve("resolve.log"));
     JsonObject graph=JsonParser.parseString(Files.readString(tree)).getAsJsonObject();JsonArray children=graph.getAsJsonArray("children");
     if(children==null||children.size()!=1)throw new IllegalStateException("Consumer did not resolve exactly one requested publication: "+publication);
     JsonObject direct=children.get(0).getAsJsonObject();if(!coordinate(direct).equals(publication)||!string(direct,"version").equals(version))throw new IllegalStateException("Consumer resolved a different publication: "+publication);
     SortedMap<String,String> dependencies=new TreeMap<>();walk(direct,dependencies);modules.add(new Module(publication,dependencies));
-   }
   }
   if(modules.isEmpty())throw new IllegalStateException("No publications resolved; establish publication scope explicitly");
   modules.sort(Comparator.comparing(Module::publication));Files.writeString(output.resolve("dependencies.json"),JSON.toJson(new Snapshot(1,profile,true,modules))+"\n");

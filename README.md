@@ -79,8 +79,8 @@ launcher. The `npx` install option below also needs Node.js; cloning or the plug
    > install quality gates on this project
 
    The agent creates a local worktree, establishes the starting API and findings, then runs
-   assessment and follows the gate order. It fixes one hotspot at a time, fully rechecks it,
-   and commits only verified candidates. The final report tells you what to review and what
+   assessment and follows the gate order. After baseline it gives you a hotspot/time estimate
+   and progress updates, validates changes in batches, and retains one undo commit per hotspot. The final report tells you what to review and what
    remains. To reserve code for later work, name the classes or methods to leave untouched;
    they remain measured. See [the pass procedure](playbooks/01-pass.md) for scope and resume.
 
@@ -111,9 +111,10 @@ The agent follows [the pass procedure](playbooks/01-pass.md), then each gate's p
 4. **Fix and enforce.** Write missing own-module tests, fix mechanically safe findings and install
    checks with measured thresholds. Preserve published API and any reserved declarations.
    Narrow exceptions for inherited API-blocked compiler findings remain visible in measurement.
-5. **Prove each change.** Remeasure every required check, compare the API, run the build and plant
-   deliberate violations before accepting a hotspot commit. Full validation can take minutes;
-   the run records its wall time.
+5. **Prove each change.** Between gate boundaries, measure changed modules and their reactor
+   dependents, with full-measurement equivalence proofs. Measure everything at each gate boundary
+   and finish, and prove enforcement with deliberate violations. The target is under an hour
+   end to end for an agent-client-sized project; the report records actual time and any miss.
    Resolve published modules as an external consumer would, too: dependency version changes
    require a recorded reason, even when the project's own build remains green.
 6. **Review the result.** The final report states what is enforced, what changed, what remains,

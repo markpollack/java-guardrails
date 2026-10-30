@@ -13,7 +13,18 @@ final class ApiArtifacts {
         var gson=new GsonBuilder().create();
         var old=gson.fromJson(Files.readString(previous.resolve("artifacts.json")),Artifact[].class);
         var now=gson.fromJson(Files.readString(output.resolve("artifacts.json")),Artifact[].class);
-        List<Artifact> merged=new ArrayList<>(Arrays.stream(old).filter(a->!selected.contains(a.module())).toList());merged.addAll(List.of(now));
+        List<Artifact> merged=new ArrayList<>();
+        for(Artifact artifact:old)if(!selected.contains(artifact.module())){
+            Path jar=output.resolve(artifact.module().replace('/','_')+".jar"),classpath=output.resolve(artifact.module().replace('/','_')+".classpath");
+            Files.copy(Path.of(artifact.jar()),jar);List<String> entries=new ArrayList<>();
+            String cp=Files.readString(Path.of(artifact.classpath())).trim();
+            if(!cp.isEmpty())for(String entry:cp.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator))){
+                Path source=Path.of(entry),destination=output.resolve("dependencies").resolve(source.getFileName());Files.createDirectories(destination.getParent());
+                if(!Files.exists(destination))Files.copy(source,destination);entries.add(destination.toString());
+            }
+            Files.writeString(classpath,String.join(java.io.File.pathSeparator,entries));merged.add(new Artifact(artifact.module(),jar.toString(),classpath.toString()));
+        }
+        merged.addAll(List.of(now));
         merged.sort(Comparator.comparing(Artifact::module));Files.writeString(output.resolve("artifacts.json"),gson.toJson(merged)+"\n");
     }
     static void capture(Path target,Path output)throws Exception{

@@ -53,6 +53,14 @@ before aggregation or the first gate. Default measurement uses scratch overlays,
 new enforcement in the target. Maven uses a private repository, never `install` into `~/.m2`.
 Public API includes reactor source modules even when they are excluded from quality gates.
 
+After the baseline, count the planned hotspots and tell the user an estimate in minutes before
+starting repairs. Run `Pass.java estimate <worktree> <kit> <hotspot-count>` for the conservative
+estimate based on measured validation time; explain expected batching and uncertainty separately.
+The target is under one hour end to end for an agent-client-sized project. This is a performance
+target, not a promise for arbitrary projects. Report progress at least every minute: completed
+hotspots, current stage, measured validation time and revised remaining estimate. The final report
+includes total wall time, including editing and interruptions, and says when the target was missed.
+
 ## Policy for every routine stop
 
 In unattended mode, use the following defaults. Explicit current owner scope and recorded answers
@@ -90,15 +98,27 @@ new finding still fails enforcement before accepting the exception.
 ## Each hotspot is a transaction
 
 Follow the gate's playbook for installation, calibration and fixes. Before a candidate can
-influence a stop, count or allowance, compare full findings. For every hotspot:
+influence a stop, count or allowance, compare findings against the original and previous accepted
+state. For an individual hotspot:
 
 ```
 <kit>/jbang <kit>/scripts/Pass.java check <worktree> <kit>
 <kit>/jbang <kit>/scripts/Pass.java accept <worktree> <kit> "<one hotspot message>"
 ```
 
-`check` measures every default gate and each configured/selected optional gate, including gates
-not installed yet. It compares against both the original start and last accepted snapshot. Finding
+Between gate boundaries, `check` measures changed modules and their transitive reactor dependents
+and combines them with unchanged modules' previous evidence. It records the exact candidate diff,
+selected modules and evidence provenance. A missing selected report is an error, never reused as
+zero. Maven compiles the selected reactor and necessary upstream dependencies once for the default
+measurement checkers; those checkers consume the same outputs. For kit acceptance, run `check-sample` on sampled real-project hotspots: it also runs full
+measurement and requires identical finding multisets. Normal runs use the proven scoped path. Configured optional checks currently fall back to full measurement.
+
+Use `check-boundary` whenever installing, changing or completing a gate. POM, shared configuration
+and architecture-test changes automatically force a full check. Gate boundaries additionally prove
+the original enforcement build and planted violations; these deliberately different builds are not
+replaced by reporting overlays. `check-final` and report generation require full final measurement.
+Every default gate and each configured/selected optional gate participates, including gates not
+installed yet. It compares against both the original start and last accepted snapshot. Finding
 identity is rule plus bound class/member, with multiplicity. Line shifts do not create findings;
 moving a finding to another declaration does. Once fixed, a finding cannot reappear as inherited
 debt. No token/AST normalization or moved-code matching is used in 0.4.0.
@@ -122,8 +142,11 @@ in private Maven storage, then resolves each publication in a fresh consumer wit
 imported BOM, project `.mvn/maven.config`, or inherited Maven settings. It includes attached
 binary JARs (except source and Javadoc archives), and preserves resolved graphs and POMs.
 This catches Maven mediation changes caused by dependency order even when japicmp and the
-producer's managed build remain green. The original start is immutable; every hotspot and
-the finish report compare against it. Unknown packaging, missing current publication output
+producer's managed build remain green. Resolve at the immutable start, at finish, and between them
+when the candidate diff touches a `pom.xml`. Otherwise preserve the last closure and record
+"no POM changed", the compared tree IDs and changed paths as the skip proof. Publication profiles
+must remain the same; a changed profile cannot reuse prior evidence. Every comparison remains
+against the immutable start. Unknown packaging, missing current publication output
 or failed dependency resolution halts. A cached producer POM cannot substitute for this build.
 
 Verify publication profiles against the project's release command before baseline capture.
@@ -146,9 +169,25 @@ records permit dependency changes only; they cannot permit a Java API change or 
 finding. The end report lists the before/after values and reasons instead of claiming that
 explicitly changed closures are unchanged.
 
-Only the exact checked tree may be accepted. The full build must pass, installed gates must be
-falsified, and plants restored. Concurrent changes prevent automatic acceptance; preserve and
-inspect them. Never roll back another writer's files. Record full validation wall time per hotspot.
+For several hotspots in one module, keep an undo commit per hotspot and validate the batch:
+
+```
+<kit>/jbang <kit>/scripts/Pass.java hotspot <worktree> <kit> "<first hotspot message>"
+# Make the next hotspot change in the same module, then queue its own commit.
+<kit>/jbang <kit>/scripts/Pass.java hotspot <worktree> <kit> "<next hotspot message>"
+<kit>/jbang <kit>/scripts/Pass.java check <worktree> <kit>
+<kit>/jbang <kit>/scripts/Pass.java accept-batch <worktree> <kit>
+```
+
+Queued commits are explicitly unverified until the batch passes. A red batch is bisected using
+isolated prefix worktrees against the last accepted evidence; no prefix becomes accepted by that
+diagnostic. Repair or undo the identified hotspot and validate the whole batch again. Gate or
+configuration changes cannot enter a hotspot batch. Never count queued commits as completed work.
+
+Only the exact checked tree may be accepted. At gate boundaries the full build must pass, installed
+gates must be falsified, and plants restored. Concurrent changes prevent automatic acceptance;
+preserve and inspect them. Never roll back another writer's files. Record validation wall time;
+for a batch, attribute the shared validation once and retain all hotspot commit IDs.
 
 ## Halt, resume, or stop work
 

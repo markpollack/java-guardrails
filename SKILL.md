@@ -35,7 +35,7 @@ and the script both by the absolute path of this directory:
 The short aliases (`./jbang measure`) resolve only when the current directory is the kit, because
 JBang reads `jbang-catalog.json` from where it is run. They need only a JDK.
 
-## Start, then work one hotspot at a time
+## Start, then validate reviewable changes
 
 1. Run `Pass.java start <target> <kit>` from a clean committed target. Work only in the isolated
    worktree it prints. Preserve the original branch and other writers' work.
@@ -45,12 +45,15 @@ JBang reads `jbang-catalog.json` from where it is run. They need only a JDK.
 3. Run assessment and follow the recommended gate order. Use each gate's playbook for report
    mode, fixes, enforcement and planted proof. In unattended mode apply the policy table in
    `playbooks/01-pass.md`; in control mode relay unanswered decisions and wait.
-4. After every hotspot, run `Pass.java check <worktree> <kit>`. It fully remeasures all five
-   default gates plus configured/selected optional checks, compares API and findings, runs
-   verification and falsifies installed gates. Repair or undo introduced findings before any
-   decision, exclusion or allowance. Do not commit a failed candidate.
-5. Run `Pass.java accept <worktree> <kit> "<hotspot message>"` on the exact checked tree.
-   At completion, generate and review the final report as described in the pass playbook.
+4. After baseline, state the planned hotspot count and estimated minutes using measured cost;
+   report progress during the run. Target under one hour for an agent-client-sized pass and
+   report actual total wall time. Follow the batching and scope procedure in `playbooks/01-pass.md`.
+5. Use `Pass.java check <worktree> <kit>` between boundaries: changed modules and reactor
+   dependents, with scoped/full equivalence proofs. Use `check-boundary` at every gate boundary;
+   finish requires full measurement. Repair or undo introduced findings before policy decisions.
+6. Accept the exact checked tree with `accept`, or use `hotspot` and `accept-batch` to retain
+   one undo commit per hotspot in a same-module batch. Queued commits are unverified; a red
+   batch is bisected. Generate and review the computed final report before finishing.
 
 Do not substitute standalone measurement output for pass validation. `GUARDRAILS_MODE: control`
 changes policy interaction only. A measurement crash or incomplete required report halts both
@@ -142,15 +145,15 @@ partial floors; a missing report is not measured zero coverage.
 - **Public/protected API is frozen**, including supertypes, method/field descriptors, generics,
   visibility and compatible additions. Preserve the original artifacts across the whole pass.
 - **Consumer dependency versions are protected.** Resolve every publication from its actual
-  publication POM in an independent consumer at the start and every accepted hotspot, including
-  finish. Repair changes or record the exact dependency, before/after versions and reason in
+  publication POM in an independent consumer at start and finish, and between them when a
+  `pom.xml` changes. Record "no POM changed" and the candidate diff to justify reuse otherwise. Repair changes or record the exact dependency, before/after versions and reason in
   decisions.md; surface every recorded change in the report. A green reactor or japicmp result
   does not establish consumer dependency compatibility.
 - **No introduced findings.** Match rule plus bound declaration with multiplicity against both
   the original and previous accepted snapshots. A moved inherited finding is introduced; fix it
   or undo the move. Hands-off code is still measured.
-- **One hotspot per commit**, the full test suite green after each, the measurement in the commit
-  body. No AI attribution in commits.
+- **One hotspot per commit**, accepted individually or as a validated same-module batch. Full
+  measurement and enforcement proof at gate boundaries and finish; retain timing evidence. No AI attribution in commits.
 - **Never move a threshold to spare the worst code.** A threshold that does not fit is a stop,
   recorded as evidence either way.
 - Nothing is pushed or proposed upstream from a trial target without the owner.

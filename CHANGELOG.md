@@ -3,7 +3,8 @@
 ## 0.4.0 — Unreleased
 
 - Default to an unattended local first pass; retain `GUARDRAILS_MODE: control` for policy checkpoints. Both modes preserve published APIs, reject introduced findings and halt on incomplete measurement.
-- Compare original public/protected API artifacts with pinned japicmp, including external ancestry; fully remeasure each hotspot with rule-and-declaration multiset attribution.
+- Compare original public/protected API artifacts with pinned japicmp, including external ancestry; compare rule-and-declaration finding multisets, with full measurements at gate boundaries and finish.
+- Share fresh compilation outputs, scope intermediate measurements to changed modules and reactor dependents with full equivalence proofs, and validate same-module hotspot batches with bisection on failure. Record estimates, progress and total wall time.
 - Preserve consumer dependency closures from actual publication POMs; reject unrecorded version changes, including changes caused solely by Maven dependency ordering. List exact reasoned exceptions in the final report.
 - Keep run evidence locally ignored; preserve the original start across same-version resume and produce a maintainer-facing review report.
 - Honor test-support scope in assessment costs, require own-module tests and positive coverage floors, and keep inherited compiler exceptions visible in scratch measurement.

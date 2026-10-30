@@ -30,6 +30,13 @@ public class PassTransactionTest extends ReactorScopeTest {
   write(worktree,"test-support/src/test/java/fx/SupportTest.java","package fx; class SupportTest { @org.junit.jupiter.api.Test void value() { org.junit.jupiter.api.Assertions.assertEquals(42,new Support().value()); } }");
   check(pass("check"),"own-module test candidate verified","Candidate verified");check(pass("accept","Test support behavior in its owning module"),"only verified tree accepted","Accepted ");
   Result tracked=run(worktree,List.of("git","ls-files"));require(!tracked.output().contains(".guardrails-run"),"run evidence stays out of accepted commits",tracked.output());
+  Path batched=worktree.resolve("app/src/main/java/fx/app/App.java");String batchOriginal=Files.readString(batched);
+  Files.writeString(batched,batchOriginal+"\n// Document the first hotspot.\n");check(pass("hotspot","Document first app hotspot"),"queue first undo commit","Queued hotspot");
+  Files.writeString(batched,Files.readString(batched).replace("public class App {","public class App { private int planted() { new IllegalArgumentException(); return 7; }"));check(pass("hotspot","Plant introduced finding in second hotspot"),"queue second undo commit");
+  Result redBatch=pass("check");require(redBatch.exit()!=0&&redBatch.output().contains("Known failing hotspot:"),"red batch is bisected without acceptance",redBatch.output());
+  require(pass("accept-batch").exit()!=0,"red batch cannot be accepted","");
+  Files.writeString(batched,batchOriginal+"\n// Document the first hotspot.\n");check(pass("hotspot","Undo planted finding"),"repair batch with separate undo commit");
+  check(pass("check-sample"),"repaired batch validated with scope equivalence","Candidate verified");check(pass("accept-batch"),"green batch retains its commits","Accepted batch");
   Path reserved=worktree.resolve("test-support/src/main/java/fx/Support.java");String reservedText=Files.readString(reserved);
   Files.writeString(reserved,reservedText.replace("42","43"));Result reservedEdit=pass("check");
   require(reservedEdit.exit()!=0&&reservedEdit.output().contains("HANDS_OFF scope/content changed"),"reserved member edit rejected before measurement",reservedEdit.output());Files.writeString(reserved,reservedText);

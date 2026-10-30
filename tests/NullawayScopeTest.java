@@ -14,9 +14,11 @@ public class NullawayScopeTest extends ReactorScopeTest {
   write(p,"app/src/main/java/fx/app/package-info.java","@org.jspecify.annotations.NullMarked package fx.app;");
   String original="package fx.app; public class Hidden { public int size() { return value().length(); } private String value() { return \"ok\"; } }";
   write(p,"app/src/main/java/fx/app/Hidden.java",original);check(run(p,List.of("git","init","-q")),"fixture init");
+  write(p,"app/src/test/java/fx/app/HiddenTest.java","package fx.app; class HiddenTest { @org.junit.jupiter.api.Test void value() { org.junit.jupiter.api.Assertions.assertEquals(2,new Hidden().size()); } }");
   Path repo=args.length>1?Path.of(args[1]):root.resolve("m2"),first=root.resolve("first"),second=root.resolve("second");
   Result a=script(p,"MeasurePass.java",first.toString(),kit.toString(),repo.toString());check(a,"adopted NullAway scope measured");if(a.exit()!=0)throw new AssertionError(root);
   write(p,"app/src/main/java/fx/app/Hidden.java",original.replace("private String", "@org.jspecify.annotations.NullUnmarked private String").replace("return \"ok\";", "return null;"));
+  write(p,"app/src/test/java/fx/app/HiddenTest.java","package fx.app; class HiddenTest { @org.junit.jupiter.api.Test void value() { org.junit.jupiter.api.Assertions.assertThrows(NullPointerException.class,() -> new Hidden().size()); } }");
   Result b=script(p,"MeasurePass.java",second.toString(),kit.toString(),repo.toString());check(b,"changed private scope measured");if(b.exit()!=0)throw new AssertionError(root);
   boolean refused=false;try{Findings.introduced(Findings.read(first.resolve("nullaway.json")),Findings.read(second.resolve("nullaway.json")));}catch(IllegalStateException expected){refused=expected.getMessage().contains("contract/scope changed");}
   require(refused,"private NullUnmarked opt-out changes the measured contract rather than minting zero","");

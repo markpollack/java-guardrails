@@ -78,6 +78,14 @@ jobs:
         run: ./jbang tests/JacocoPositiveFloorTest.java .
       - name: Full pass measurement and missing-report remediation
         run: ./jbang tests/PassMeasurementTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Enforcement filters cannot hide measured findings
+        run: ./jbang tests/MeasurementFilterTest.java . "${{ runner.temp }}/guardrails-m2"
+      - name: Descriptor-only modules retain complete architecture measurement
+        run: ./jbang tests/DescriptorModuleTest.java .
+      - name: Missing scoped evidence and changed multiplicity cannot pass
+        run: ./jbang tests/ValidationPlanTest.java
+      - name: Scoped and full reactor findings agree
+        run: ./jbang tests/ValidationOptimizationTest.java . "${{ runner.temp }}/guardrails-m2"
       - name: Both modes preserve scope and same-version resume
         run: ./jbang tests/PassPolicyTest.java .
       - name: Only exact verified candidates can be accepted

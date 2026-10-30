@@ -11,7 +11,11 @@ final class Run {
         Files.createDirectories(log.toAbsolutePath().getParent());Files.writeString(log.resolveSibling(log.getFileName()+".argv"),redact(String.join("\n",command))+"\n");
         Process p=new ProcessBuilder(command).directory(cwd.toFile()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         Thread hook=new Thread(()->{p.descendants().forEach(ProcessHandle::destroy);p.destroy();});Runtime.getRuntime().addShutdownHook(hook);
-        int exit;try{exit=p.waitFor();}catch(InterruptedException e){p.descendants().forEach(ProcessHandle::destroy);p.destroy();Thread.currentThread().interrupt();throw e;}finally{Runtime.getRuntime().removeShutdownHook(hook);}
+        long started=System.nanoTime();
+        int exit;try{
+            while(!p.waitFor(30,java.util.concurrent.TimeUnit.SECONDS))System.out.printf(Locale.ROOT,"Still running: %s (%.1f minutes); evidence %s%n",log.getFileName(),(System.nanoTime()-started)/60_000_000_000.0,log);
+            exit=p.exitValue();
+        }catch(InterruptedException e){p.descendants().forEach(ProcessHandle::destroy);p.destroy();Thread.currentThread().interrupt();throw e;}finally{Runtime.getRuntime().removeShutdownHook(hook);}
         Files.writeString(log,redact(Files.readString(log)));return exit;
     }
     static final class Failed extends Exception {

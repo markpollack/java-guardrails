@@ -67,8 +67,10 @@ final class ValidationPlan {
         try(var paths=Files.list(previous)){
             for(Path old:paths.filter(p->p.getFileName().toString().matches("(pmd|archunit|jacoco|spotbugs|errorprone)\\.json")).toList()){
                 Path file=output.resolve(old.getFileName());var before=Findings.read(old);
-                if(!Files.exists(file)){Files.copy(old,file);continue;}
+                List<String> expected=before.modules().stream().filter(selected::contains).toList();
+                if(!Files.exists(file))throw new IllegalStateException("Missing scoped measurement: "+file);
                 var measured=Findings.read(file);
+                if(!measured.modules().equals(expected))throw new IllegalStateException("Scoped measurement omitted or added modules: "+before.gate()+" expected "+expected+", got "+measured.modules());
                 if(!before.gate().equals(measured.gate())||!before.checker().equals(measured.checker()))throw new IllegalStateException("Scoped measurement contract changed: "+before.gate());
                 List<Findings.Finding> findings=new ArrayList<>(before.findings().stream().filter(f->!selected.contains(f.module())).toList());findings.addAll(measured.findings());
                 Findings.write(file,new Findings.Snapshot(1,before.gate(),before.checker(),measured.sourceHash(),before.modules(),List.of("scoped",previous.toString(),String.join(",",selected)),true,findings,measured.elapsedMillis()));
