@@ -10,14 +10,27 @@ public class DescriptorModuleTest extends ReactorScopeTest {
     public static void main(String[] args)throws Exception {
         kit=Path.of(args.length==0?".":args[0]).toAbsolutePath().normalize();
         root=Files.createTempDirectory("guardrails-descriptor-");System.out.println("Evidence: "+root);
+        Path repo=args.length>1?Path.of(args[1]).toAbsolutePath():root.resolve("m2");
         Path target=fixture("target",true,false);
         Path source=target.resolve("z-lib/src/main/java/fx/lib/Lib.java");
         Files.delete(source);
         write(target,"app/src/main/java/fx/app/App.java","package fx.app; public class App { public int value() { return 42; } }");
         write(target,"z-lib/src/main/java/module-info.java","module descriptor.only { }");
-        check(maven(target,"-Dmaven.repo.local="+root.resolve("m2"),"-DskipTests","compile"),"compile real descriptor module");
+        check(maven(target,"-Dmaven.repo.local="+repo,"-DskipTests","compile"),"compile real descriptor module");
         check(script(target,"CycleSnapshot.java",root.resolve("cycles.json").toString()),"descriptor-only module has zero cycles");
         if(Files.exists(root.resolve("cycles.json")))require(Findings.read(root.resolve("cycles.json")).modules().contains("z-lib"),"descriptor module remains in measured inventory","");
+        write(target,".gitignore","target/\n");
+        decisions(target,"TEST_SUPPORT_MODULES: gate\n");
+        check(run(target,List.of("git","init","-q")),"initialize full measurement fixture");
+        Path measured=root.resolve("measurement");
+        Result complete=script(target,"MeasurePass.java",measured.toString(),kit.toString(),repo.toString());
+        check(complete,"descriptor-only module completes shared measurement","Full measurement complete");
+        if(complete.exit()!=0)throw new AssertionError("Shared descriptor measurement failed; evidence "+root);
+        for(String gate:List.of("pmd","archunit","jacoco","spotbugs","errorprone")){
+            var snapshot=Findings.read(measured.resolve(gate+".json"));
+            require(snapshot.complete()&&snapshot.modules().contains("z-lib"),gate+" retains complete descriptor module inventory","");
+            require(snapshot.findings().stream().noneMatch(f->f.module().equals("z-lib")),gate+" has no invented descriptor findings","");
+        }
         // A descriptor must not conceal a missing ordinary class.
         write(target,"z-lib/src/main/java/fx/lib/Missing.java","package fx.lib; public class Missing { }");
         Result missing=script(target,"CycleSnapshot.java",root.resolve("missing.json").toString());

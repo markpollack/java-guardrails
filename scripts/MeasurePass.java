@@ -29,7 +29,7 @@ public class MeasurePass {
             script("SourceSnapshot.java",scratch.toString(),output.resolve("pmd.json").toString());
             // One fresh compilation supplies compiler diagnostics, tests, coverage, bytecode
             // analysis and API artifacts. Overlays are reporting-only and remain in scratch.
-            compiler();spotbugs();scopeBuild();
+            compiler();spotbugs();scopeBuild();descriptorSpotbugs();
             List<String> build=maven("errorprone");
             build.remove("-Djacoco.skip=true");build.remove("-Dspotbugs.skip=true");
             build.addAll(List.of("-X","-Derrorprone.failOnWarning=false","-Derrorprone.extraArgs=-XepAllErrorsAsWarnings -XepIgnoreSuppressionAnnotations",
@@ -117,6 +117,20 @@ public class MeasurePass {
             for(Path source:paths.filter(Files::isRegularFile).toList()){
                 Path destination=raw.resolve(scratch.relativize(source));Files.createDirectories(destination.getParent());Files.copy(source,destination,StandardCopyOption.COPY_ATTRIBUTES);
             }
+        }
+    }
+    static void descriptorSpotbugs()throws Exception{
+        for(var module:Util.modules(scratch)){
+            var sources=Util.javaFiles(module.sourceRoot());
+            if(sources.isEmpty()||!sources.stream().allMatch(p->p.getFileName().toString().equals("module-info.java")))continue;
+            // SpotBugs cannot analyze a JPMS descriptor. This is reporting-only;
+            // CycleSnapshot still requires a valid compiled descriptor, and
+            // BytecodeSnapshot rejects a missing report if executable code appears.
+            Path pom=module.dir().resolve("pom.xml");Document doc=Xml.read(pom);
+            Element plugins=Xml.ensure(Xml.ensure(doc.getDocumentElement(),"build"),"plugins");
+            Element plugin=Xml.children(plugins,"plugin").stream().filter(p->Xml.text(p,"artifactId").equals("spotbugs-maven-plugin")).findFirst().orElse(null);
+            if(plugin==null){plugin=doc.createElement("plugin");plugins.appendChild(plugin);Xml.set(plugin,"groupId","com.github.spotbugs");Xml.set(plugin,"artifactId","spotbugs-maven-plugin");}
+            Xml.set(Xml.ensure(plugin,"configuration"),"skip","true");Xml.write(doc,pom);
         }
     }
     static void script(String name,String... args)throws Exception{
