@@ -52,16 +52,29 @@ final class ValidationPlan {
         for(var entry:source.entrySet()){
             Set<String> dependencies=new TreeSet<>();var declared=Xml.child(entry.getValue(),"dependencies");
             if(declared!=null)for(var dependency:Xml.children(declared,"dependency")){
-                String name=coordinates.get(Xml.text(dependency,"groupId")+":"+Xml.text(dependency,"artifactId"));if(name!=null)dependencies.add(name);
+                addCoordinate(dependency,coordinates,dependencies);
             }
-            // Build plugins can themselves be reactor modules.
+            // Build-time reactor inputs affect consumers even without a project dependency.
             var build=Xml.child(entry.getValue(),"build");var plugins=build==null?null:Xml.child(build,"plugins");
             if(plugins!=null)for(var plugin:Xml.children(plugins,"plugin")){
-                String name=coordinates.get(Xml.text(plugin,"groupId")+":"+Xml.text(plugin,"artifactId"));if(name!=null)dependencies.add(name);
+                addCoordinate(plugin,coordinates,dependencies);
+                var helpers=Xml.child(plugin,"dependencies");
+                if(helpers!=null)for(var helper:Xml.children(helpers,"dependency"))addCoordinate(helper,coordinates,dependencies);
+                // Include execution-specific compiler configuration as well as plugin defaults.
+                var processors=plugin.getElementsByTagName("annotationProcessorPaths");
+                for(int i=0;i<processors.getLength();i++)for(var processor:Xml.children((org.w3c.dom.Element)processors.item(i),"path"))
+                    addCoordinate(processor,coordinates,dependencies);
             }
+            var extensions=build==null?null:Xml.child(build,"extensions");
+            if(extensions!=null)for(var extension:Xml.children(extensions,"extension"))addCoordinate(extension,coordinates,dependencies);
             graph.put(entry.getKey(),dependencies);
         }
         Files.writeString(out,new GsonBuilder().setPrettyPrinting().create().toJson(graph)+"\n");
+    }
+    static void addCoordinate(org.w3c.dom.Element artifact,Map<String,String> coordinates,Set<String> dependencies){
+        String group=Xml.text(artifact,"groupId");
+        if(group.isBlank()&&artifact.getTagName().equals("plugin"))group="org.apache.maven.plugins";
+        String name=coordinates.get(group+":"+Xml.text(artifact,"artifactId"));if(name!=null)dependencies.add(name);
     }
     static void merge(Path previous,Path output,List<String> selected)throws Exception {
         try(var paths=Files.list(previous)){
