@@ -70,6 +70,8 @@ jobs:
         run: ./jbang tests/AssessScopeTest.java .
       - name: Frozen APIs reject compatible and incompatible shape changes
         run: ./jbang tests/ApiFreezeTest.java .
+      - name: Maven POM classpaths preserve complete API comparison
+        run: ./jbang tests/ApiClasspathTest.java . "${{ runner.temp }}/guardrails-m2"
       - name: Published consumer dependencies reject unrecorded Maven mediation changes
         run: ./jbang tests/ConsumerClosureTest.java . "${{ runner.temp }}/guardrails-m2"
       - name: Findings follow declarations and preserve multiplicity across hotspots

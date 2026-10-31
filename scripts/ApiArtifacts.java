@@ -1,5 +1,5 @@
 //JAVA 21+
-//SOURCES ValidationPlan.java Util.java
+//SOURCES ValidationPlan.java Util.java Xml.java
 //DEPS com.google.code.gson:gson:2.13.2
 import java.nio.file.*;
 import java.util.*;
@@ -44,6 +44,18 @@ final class ApiArtifacts {
             String text=Files.readString(cp).trim();
             if(!text.isEmpty())for(String entry:text.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator))){
                 Path path=Path.of(entry);if(!Files.isRegularFile(path))throw new IllegalStateException("Missing API dependency artifact: "+path);
+                // dependency:build-classpath also includes dependencies of type pom,
+                // including reactor pom.xml paths. They contain no bytecode; retaining
+                // them as .jar files makes japicmp's class pool fail on valid reactors.
+                // Validate the metadata, and never treat a malformed JAR as a POM.
+                String name=path.getFileName().toString();
+                if(name.endsWith(".pom")||name.equals("pom.xml")){
+                    var project=Xml.read(path).getDocumentElement();
+                    if(!project.getTagName().equals("project")||!Xml.text(project,"modelVersion").equals("4.0.0"))
+                        throw new IllegalStateException("Invalid API dependency POM: "+path);
+                    continue;
+                }
+                try(var archive=new JarFile(path.toFile())){archive.size();}
                 byte[] bytes=Files.readAllBytes(path);
                 String digest=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
                 Path save=output.resolve("dependencies").resolve(digest+".jar");Files.createDirectories(save.getParent());
