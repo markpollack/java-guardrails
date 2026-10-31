@@ -32,6 +32,10 @@ public class MeasurePass {
             compiler();spotbugs();scopeBuild();descriptorSpotbugs();
             List<String> build=maven("errorprone");
             build.remove("-Djacoco.skip=true");build.remove("-Dspotbugs.skip=true");
+            // Capture the effective input model before lifecycle goals mutate it.
+            // dependency:properties adds coordinate-named keys containing colons;
+            // a subsequent help:effective-pom cannot serialize those as valid XML.
+            if(plan==null||plan.full())build.addAll(List.of("org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom","-Doutput="+output.resolve("reactor-model.xml")));
             build.addAll(List.of("-X","-Derrorprone.failOnWarning=false","-Derrorprone.extraArgs=-XepAllErrorsAsWarnings -XepIgnoreSuppressionAnnotations",
                 "-Dspotbugs.includeFilterFile="+scratch.resolve(".guardrails-spotbugs-all.xml"),"-Dspotbugs.excludeFilterFile="+scratch.resolve(".guardrails-spotbugs-none.xml"),
                 "-Dspotbugs.skip=false","clean","org.jacoco:jacoco-maven-plugin:0.8.15:prepare-agent","verify",
@@ -39,7 +43,6 @@ public class MeasurePass {
                 "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath","-Dmdep.outputFile=target/guardrails-api-classpath.txt"));
             for(String property:List.of("includeFilterFiles","excludeFilterFiles","excludeBugsFile","excludeBugsFiles","onlyAnalyze","visitors","omitVisitors","chooseVisitors","userPrefs"))build.add("-Dspotbugs."+property+"=");
             if(plan!=null&&!plan.full())build.addAll(List.of("-pl",String.join(",",plan.modules()),"-am"));
-            else build.addAll(List.of("org.apache.maven.plugins:maven-help-plugin:3.5.1:effective-pom","-Doutput="+output.resolve("reactor-model.xml")));
             System.out.println("Validation: compile, test and analyze shared outputs");
             run(build,scratch,output.resolve("tests.log"));
             Files.copy(output.resolve("tests.log"),output.resolve("compiler.log"));
